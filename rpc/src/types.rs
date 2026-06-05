@@ -193,8 +193,15 @@ pub struct EventView {
     pub source_command: String,
     /// Visibility shape: "public" or "parties".
     pub visibility: String,
-    /// JSON payload if it decodes as JSON, else hex bytes.
+    /// True when the payload is hidden because the event is private. Public
+    /// observers only ever see the commitment for private events — never the
+    /// contents, which honors the VeilLedger privacy model.
+    pub redacted: bool,
+    /// Number of stakeholders (for private events; 0 for public).
+    pub stakeholders: usize,
+    /// JSON payload if public and it decodes as JSON, else null.
     pub payload_json: Option<serde_json::Value>,
+    /// Hex bytes if public and non-JSON, else null. Always null when redacted.
     pub payload_hex: Option<String>,
 }
 

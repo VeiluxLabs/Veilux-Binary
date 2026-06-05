@@ -47,6 +47,15 @@ The UI calls the node's `explorer_*` JSON-RPC methods (`explorer_stats`,
 The node serves permissive CORS, so the explorer can be hosted on a different
 origin than the node.
 
+## Privacy (VeilLedger)
+
+VEILUX is a privacy chain, and the explorer respects that. Public events are
+shown in full, but **private events** (`Visibility::Parties`) are **redacted**:
+the explorer only exposes their commitment (proof the event is in the block's
+Merkle root) and the stakeholder count — never the payload. The node enforces
+this server-side, so contents are readable only by stakeholders (from their
+sub-ledger) or by an auditor via selective disclosure.
+
 ## Deploy
 
 Because it is static, you can host it on GitHub Pages, Netlify, Vercel, S3, or

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Privacy: explorer now redacts private events.** The `explorer_*` event views
+  no longer expose the payload of non-public events. For `Visibility::Parties`
+  events the node returns only the commitment and stakeholder count (`redacted:
+  true`), honoring the VeilLedger model — public observers can prove a private
+  event happened without seeing its contents. The web explorer renders a privacy
+  notice instead of the payload.
+
 ## [0.3.1] - 2026-06-05
 
 ### Added

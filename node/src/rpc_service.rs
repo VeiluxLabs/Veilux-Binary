@@ -357,21 +357,33 @@ fn block_view(b: &veilux_kernel::Block) -> BlockView {
 }
 
 fn event_view(height: u64, ev: &veilux_kernel::Event) -> EventView {
-    let (payload_json, payload_hex) = match serde_json::from_slice::<serde_json::Value>(&ev.payload)
-    {
-        Ok(j) => (Some(j), None),
-        Err(_) => (None, Some(hex::encode(&ev.payload))),
+    // VeilLedger privacy: a public block explorer must NOT reveal the contents
+    // of private events. For non-public events we expose only the commitment
+    // (proof the event happened and is in the Merkle root) and the stakeholder
+    // count — never the payload. Stakeholders read contents from their own
+    // sub-ledger; auditors via selective disclosure.
+    let (visibility, redacted, stakeholders) = match &ev.visibility {
+        veilux_kernel::Visibility::Public => ("public".to_string(), false, 0usize),
+        veilux_kernel::Visibility::Parties(p) => ("parties".to_string(), true, p.len()),
     };
-    let visibility = match &ev.visibility {
-        veilux_kernel::Visibility::Public => "public".to_string(),
-        veilux_kernel::Visibility::Parties(_) => "parties".to_string(),
+
+    let (payload_json, payload_hex) = if redacted {
+        (None, None)
+    } else {
+        match serde_json::from_slice::<serde_json::Value>(&ev.payload) {
+            Ok(j) => (Some(j), None),
+            Err(_) => (None, Some(hex::encode(&ev.payload))),
+        }
     };
+
     EventView {
         block_height: height,
         prism: ev.prism.clone(),
         commitment: ev.commitment().to_hex(),
         source_command: ev.source_command.to_hex(),
         visibility,
+        redacted,
+        stakeholders,
         payload_json,
         payload_hex,
     }

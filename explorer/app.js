@@ -191,17 +191,18 @@ async function loadTxns() {
     if (!events.length) { box.innerHTML = '<div class="empty">No transactions yet</div>'; return; }
     box.innerHTML = "";
     for (const ev of events) {
-      const kind = ev.payload_json && ev.payload_json.kind ? ev.payload_json.kind : ev.prism;
-      const priv = ev.visibility !== "public";
+      const priv = ev.redacted || ev.visibility !== "public";
+      // For private events we only know the prism (payload is hidden).
+      const kind = !priv && ev.payload_json && ev.payload_json.kind ? ev.payload_json.kind : ev.prism;
       const row = el("div", "row");
       row.innerHTML = `
-        <div class="row-icon">Tx</div>
+        <div class="row-icon">${priv ? "🔒" : "Tx"}</div>
         <div class="row-main">
           <div class="row-title"><a href="#/tx/${ev.source_command}">${esc(kind)}</a></div>
           <div class="row-sub">block <a href="#/block/${ev.block_height}">#${num(ev.block_height)}</a> · <span class="badge prism">${esc(ev.prism)}</span></div>
         </div>
         <div class="row-right">
-          ${priv ? '<span class="badge private">private</span>' : '<span class="badge">public</span>'}
+          ${priv ? `<span class="badge private">private · ${ev.stakeholders} parties</span>` : '<span class="badge">public</span>'}
           <div class="row-sub hashlink">${short(ev.source_command, 8)}</div>
         </div>`;
       box.appendChild(row);
@@ -296,12 +297,26 @@ async function renderTxDetail(commandId) {
       ["Events", num(loc.events.length)],
     ];
     const eventsHtml = loc.events.map((ev) => {
-      const body = ev.payload_json
-        ? `<pre class="json">${esc(JSON.stringify(ev.payload_json, null, 2))}</pre>`
-        : `<pre class="json">0x${esc(ev.payload_hex || "")}</pre>`;
+      let body;
+      if (ev.redacted) {
+        body = `<div class="privacy-note">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4Zm0 10.9h7c-.5 4.1-3.3 7.8-7 8.9V12H5V6.3l7-3.1V11.9Z"/></svg>
+          <div>
+            <strong>Private event — contents hidden</strong>
+            <p>This event is visible only to its ${ev.stakeholders} stakeholder${ev.stakeholders === 1 ? "" : "s"}.
+            The explorer can prove it happened (commitment below is in the block's Merkle root) but cannot read its payload.
+            Stakeholders decrypt it from their sub-ledger; auditors via selective disclosure.</p>
+          </div>
+        </div>
+        <div class="kv"><div class="k">Commitment</div><div class="v">${esc(ev.commitment)}</div></div>`;
+      } else if (ev.payload_json) {
+        body = `<pre class="json">${esc(JSON.stringify(ev.payload_json, null, 2))}</pre>`;
+      } else {
+        body = `<pre class="json">0x${esc(ev.payload_hex || "")}</pre>`;
+      }
       return `
         <div class="detail-card">
-          <h2>Event · <span class="badge prism">${esc(ev.prism)}</span> ${ev.visibility !== "public" ? '<span class="badge private">private</span>' : ""}</h2>
+          <h2>Event · <span class="badge prism">${esc(ev.prism)}</span> ${ev.redacted ? '<span class="badge private">private</span>' : '<span class="badge">public</span>'}</h2>
           ${body}
         </div>`;
     }).join("");
@@ -539,6 +554,14 @@ const res = await client.contractVerify({
   source: "; assembly…", bytecode_hex: code.bytecode_hex, abi: "",
 });
 console.log(res.verified);</pre>
+
+    <h2>Privacy (VeilLedger)</h2>
+    <p>VEILUX is a privacy chain. Public events are shown in full, but
+    <strong>private events (Visibility: parties) are redacted</strong> — the
+    explorer only exposes their <code>commitment</code> (proof the event is in
+    the block's Merkle root) and the number of stakeholders, never the payload.
+    Contents are readable only by stakeholders (from their sub-ledger) or by
+    auditors via selective disclosure.</p>
 
     <h2>WebSocket subscriptions</h2>
     <pre>const ws = new WebSocket("ws://127.0.0.1:8646");

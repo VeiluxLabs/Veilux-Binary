@@ -115,6 +115,8 @@ export interface EventView {
   commitment: string;
   source_command: string;
   visibility: string;
+  redacted: boolean;
+  stakeholders: number;
   payload_json: unknown | null;
   payload_hex: string | null;
 }
