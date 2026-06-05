@@ -138,9 +138,15 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         "  fees     : {}",
         if spec.fee_price_per_gas > 0 {
             format!(
-                "{}/gas, {}% burned",
+                "{}/gas (base {}), {}% burned{}",
                 spec.fee_price_per_gas,
-                spec.fee_burn_bps / 100
+                node.current_base_price(),
+                spec.fee_burn_bps / 100,
+                if spec.fee_target_gas > 0 {
+                    format!(", dynamic target {} gas/block", spec.fee_target_gas)
+                } else {
+                    String::new()
+                }
             )
         } else {
             "disabled".to_string()

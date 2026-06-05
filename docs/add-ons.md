@@ -356,6 +356,8 @@ unspendable until unstaked.
 { "op": "slash",       "proof": { "offender": "bob", "public_key": "<hex>",
                                   "message_a": "<hex>", "signature_a": "<hex>",
                                   "message_b": "<hex>", "signature_b": "<hex>" } }
+{ "op": "fund_rewards", "amount": "1000" }
+{ "op": "claim_rewards" }
 ```
 
 ### Rules & gas
@@ -481,7 +483,8 @@ A new chain chooses its token identity in a genesis spec (`--genesis spec.json`)
     { "party": "ecosystem",  "amount": 100000000 }
   ],
   "fee_price_per_gas": 1,
-  "fee_burn_bps": 5000
+  "fee_burn_bps": 5000,
+  "fee_target_gas": 50000
 }
 ```
 
@@ -491,17 +494,37 @@ idempotent — every validator sharing the spec converges on byte-identical stat
 
 ### Transaction fees (gas market)
 When `fee_price_per_gas > 0`, every command is charged a fee during block
-execution: `fee = gas_used × fee_price_per_gas`, paid in the native token by the
+execution: `fee = gas_used × base_price`, paid in the native token by the
 command's submitter. The fee is split by `fee_burn_bps`:
 
 - a configurable fraction is **burned** (total supply decreases — deflationary), and
 - the remainder is paid to the **block proposer** as a reward (validator income).
 
+**Dynamic base fee (EIP-1559 style).** If `fee_target_gas > 0`, the price is no
+longer fixed: after each block the base price (stored in state at
+`fee/base_price`) moves up to ~12.5% toward demand — it **rises** when a block
+uses more than `fee_target_gas` and **falls** (never below the genesis
+`fee_price_per_gas` floor) when it uses less. This gives a self-regulating gas
+market. With `fee_target_gas = 0` the price stays fixed at `fee_price_per_gas`.
+
 The charge is computed deterministically by every node during re-execution and
 is capped at the payer's balance, so it can never cause nodes to disagree. Fees
-are disabled (`fee_price_per_gas = 0`) by default, so existing dev flows are
-unchanged until a chain opts in. This is the anti-spam + validator-incentive
-backbone that pairs with the Staking Prism.
+are disabled (`fee_price_per_gas = 0`) by default. This is the anti-spam +
+validator-incentive backbone that pairs with the Staking Prism.
+
+### Staking rewards
+The Staking Prism includes a reward pool with fair, proportional distribution
+(a MasterChef-style accumulator):
+
+- `fund_rewards { amount }` — move native LUX into the staking reward pool; the
+  pool's reward-per-stake accumulator grows by `amount / total_staked`.
+- `claim_rewards` — a staker withdraws their accrued share, proportional to how
+  much they had locked while rewards accrued. Stake added *after* a funding
+  event earns nothing from it (the accumulator snapshot prevents back-claiming).
+
+Rewards are settled automatically whenever a party stakes, unstakes, delegates,
+or undelegates, so claims are always exact. A chain can route proposer fee
+income into this pool to share validator rewards with delegators.
 
 ---
 

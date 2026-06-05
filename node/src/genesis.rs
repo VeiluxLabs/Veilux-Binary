@@ -14,6 +14,8 @@ pub struct ChainSpec {
     pub fee_price_per_gas: u128,
     #[serde(default = "default_burn_bps")]
     pub fee_burn_bps: u16,
+    #[serde(default)]
+    pub fee_target_gas: u64,
 }
 
 fn default_burn_bps() -> u16 {
@@ -39,6 +41,7 @@ impl Default for ChainSpec {
             }],
             fee_price_per_gas: 0,
             fee_burn_bps: default_burn_bps(),
+            fee_target_gas: 0,
         }
     }
 }
@@ -57,6 +60,7 @@ impl ChainSpec {
         crate::node::FeePolicy {
             price_per_gas: self.fee_price_per_gas,
             burn_bps: self.fee_burn_bps,
+            target_gas: self.fee_target_gas,
         }
     }
 

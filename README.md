@@ -220,7 +220,7 @@ VEILUX ships a complete economic layer on top of the native token:
       { "party": "validators", "amount": 200000000 },
       { "party": "ecosystem",  "amount": 100000000 }
     ],
-    "fee_price_per_gas": 1, "fee_burn_bps": 5000
+    "fee_price_per_gas": 1, "fee_burn_bps": 5000, "fee_target_gas": 50000
   }
   ```
 

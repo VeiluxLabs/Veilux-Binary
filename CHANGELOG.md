@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-06-05
+
+### Added
+- **Dynamic base fee (EIP-1559 style).** When a chain sets `fee_target_gas > 0`
+  at genesis, the per-gas price is no longer fixed: after each block the base
+  price (kept deterministically in state at `fee/base_price`) adjusts up to
+  ~12.5% toward demand — rising when a block exceeds the target gas and falling
+  (never below the genesis floor) when it is under. With `fee_target_gas = 0` the
+  price stays fixed. Verified live: under sustained congestion the base price
+  climbed block over block.
+- **Staking reward pool with proportional claims.** New `fund_rewards` and
+  `claim_rewards` staking commands implement a MasterChef-style reward
+  accumulator: funded LUX is distributed across all current stake in proportion
+  to each staker's locked amount, and a staker's pending reward is settled
+  automatically on every stake/unstake/delegate/undelegate. Stake added after a
+  funding event cannot back-claim earlier rewards. Lets a chain share validator
+  fee income with delegators fairly.
+
 ## [0.3.6] - 2026-06-05
 
 ### Added
@@ -239,7 +257,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.7...HEAD
+[0.3.7]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.3...v0.3.4

@@ -24,11 +24,20 @@ const DELEG_PREFIX: &str = "staking/delegation/";
 const PROPOSAL_PREFIX: &str = "gov/proposal/";
 const VOTE_PREFIX: &str = "gov/vote/";
 const SLASH_PREFIX: &str = "staking/slashed/";
+const REWARD_ACC_KEY: &str = "staking/reward_acc";
+const REWARD_DEBT_PREFIX: &str = "staking/reward_debt/";
+const TOTAL_STAKE_KEY: &str = "staking/total_stake";
+
+const ACC_SCALE: u128 = 1_000_000_000_000;
 
 pub const DEFAULT_SLASH_BPS: u16 = 2_000;
 
 pub fn escrow_account() -> PartyId {
     PartyId::new("staking/escrow")
+}
+
+pub fn reward_pool_account() -> PartyId {
+    PartyId::new("staking/rewards")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,6 +132,11 @@ pub enum StakingCommand {
     Slash {
         proof: EquivocationProof,
     },
+    FundRewards {
+        #[serde(with = "u128_dec")]
+        amount: u128,
+    },
+    ClaimRewards,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -182,6 +196,16 @@ pub enum StakingEvent {
         #[serde(with = "u128_dec")]
         remaining_self: u128,
     },
+    RewardsFunded {
+        funder: PartyId,
+        #[serde(with = "u128_dec")]
+        amount: u128,
+    },
+    RewardsClaimed {
+        who: PartyId,
+        #[serde(with = "u128_dec")]
+        amount: u128,
+    },
 }
 
 fn split_height(payload: &[u8]) -> (&[u8], u64) {
@@ -220,6 +244,89 @@ impl StakingPrism {
 
     fn slash_key(offence: &Hash) -> String {
         format!("{SLASH_PREFIX}{}", offence.to_hex())
+    }
+
+    fn reward_debt_key(who: &PartyId) -> String {
+        format!("{REWARD_DEBT_PREFIX}{}", who.0)
+    }
+
+    fn locked_key(who: &PartyId) -> String {
+        format!("staking/locked/{}", who.0)
+    }
+
+    fn locked_of(state: &StateTree, who: &PartyId) -> u128 {
+        Self::read_u128(state, &Self::locked_key(who))
+    }
+
+    fn harvest_pending(state: &mut StateTree, who: &PartyId) -> Result<u128, PrismError> {
+        let locked = Self::locked_of(state, who);
+        let pending = Self::pending_reward(state, who, locked);
+        if pending > 0 {
+            move_balance(
+                state,
+                &native_token_id(),
+                &reward_pool_account(),
+                who,
+                pending,
+            )?;
+        }
+        Ok(pending)
+    }
+
+    fn update_lock(state: &mut StateTree, who: &PartyId, delta: i128) -> Result<(), PrismError> {
+        Self::harvest_pending(state, who)?;
+        let cur = Self::locked_of(state, who) as i128;
+        let next = (cur + delta).max(0) as u128;
+        Self::write_u128(state, &Self::locked_key(who), next)?;
+        Self::add_total_stake(state, delta)?;
+        Self::settle_reward_debt(state, who, next)?;
+        Ok(())
+    }
+
+    fn read_u128(state: &StateTree, key: &str) -> u128 {
+        state
+            .get_json::<String>(key)
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0)
+    }
+
+    fn write_u128(state: &mut StateTree, key: &str, v: u128) -> Result<(), PrismError> {
+        state
+            .put_json(key, &v.to_string())
+            .map_err(|e| PrismError::Internal(e.to_string()))
+    }
+
+    fn total_stake(state: &StateTree) -> u128 {
+        Self::read_u128(state, TOTAL_STAKE_KEY)
+    }
+
+    fn add_total_stake(state: &mut StateTree, delta: i128) -> Result<(), PrismError> {
+        let cur = Self::total_stake(state) as i128;
+        let next = (cur + delta).max(0) as u128;
+        Self::write_u128(state, TOTAL_STAKE_KEY, next)
+    }
+
+    fn reward_acc(state: &StateTree) -> u128 {
+        Self::read_u128(state, REWARD_ACC_KEY)
+    }
+
+    fn pending_reward(state: &StateTree, who: &PartyId, power: u128) -> u128 {
+        let acc = Self::reward_acc(state);
+        let entitled = power.saturating_mul(acc) / ACC_SCALE;
+        let debt = Self::read_u128(state, &Self::reward_debt_key(who));
+        entitled.saturating_sub(debt)
+    }
+
+    fn settle_reward_debt(
+        state: &mut StateTree,
+        who: &PartyId,
+        power: u128,
+    ) -> Result<(), PrismError> {
+        let acc = Self::reward_acc(state);
+        let entitled = power.saturating_mul(acc) / ACC_SCALE;
+        Self::write_u128(state, &Self::reward_debt_key(who), entitled)
     }
 
     pub fn stake_of(state: &StateTree, who: &PartyId) -> StakeRecord {
@@ -291,6 +398,7 @@ impl Prism for StakingPrism {
                 let mut rec = Self::stake_of(state, &me);
                 rec.self_bonded += amount;
                 Self::save_stake(state, &rec)?;
+                Self::update_lock(state, &me, amount as i128)?;
                 Ok(PrismOutput::single(
                     Self::event(
                         command,
@@ -314,6 +422,7 @@ impl Prism for StakingPrism {
                 move_balance(state, &token, &escrow_account(), &me, amount)?;
                 rec.self_bonded -= amount;
                 Self::save_stake(state, &rec)?;
+                Self::update_lock(state, &me, -(amount as i128))?;
                 Ok(PrismOutput::single(
                     Self::event(
                         command,
@@ -337,6 +446,7 @@ impl Prism for StakingPrism {
                 let mut vrec = Self::stake_of(state, &validator);
                 vrec.delegated_in += amount;
                 Self::save_stake(state, &vrec)?;
+                Self::update_lock(state, &me, amount as i128)?;
                 Ok(PrismOutput::single(
                     Self::event(
                         command,
@@ -360,6 +470,7 @@ impl Prism for StakingPrism {
                 let mut vrec = Self::stake_of(state, &validator);
                 vrec.delegated_in = vrec.delegated_in.saturating_sub(amount);
                 Self::save_stake(state, &vrec)?;
+                Self::update_lock(state, &me, -(amount as i128))?;
                 Ok(PrismOutput::single(
                     Self::event(
                         command,
@@ -557,6 +668,40 @@ impl Prism for StakingPrism {
                     7_000,
                 ))
             }
+
+            StakingCommand::FundRewards { amount } => {
+                if amount == 0 {
+                    return Err(PrismError::InvalidPayload("amount must be > 0".into()));
+                }
+                let total = Self::total_stake(state);
+                if total == 0 {
+                    return Err(PrismError::InvalidPayload("no stake to reward yet".into()));
+                }
+                move_balance(state, &token, &me, &reward_pool_account(), amount)?;
+                let acc = Self::reward_acc(state);
+                let added = amount.saturating_mul(ACC_SCALE) / total;
+                Self::write_u128(state, REWARD_ACC_KEY, acc.saturating_add(added))?;
+                Ok(PrismOutput::single(
+                    Self::event(command, StakingEvent::RewardsFunded { funder: me, amount }),
+                    2_000,
+                ))
+            }
+
+            StakingCommand::ClaimRewards => {
+                let claimed = Self::harvest_pending(state, &me)?;
+                let locked = Self::locked_of(state, &me);
+                Self::settle_reward_debt(state, &me, locked)?;
+                Ok(PrismOutput::single(
+                    Self::event(
+                        command,
+                        StakingEvent::RewardsClaimed {
+                            who: me,
+                            amount: claimed,
+                        },
+                    ),
+                    2_500,
+                ))
+            }
         }
     }
 
@@ -587,6 +732,11 @@ pub fn voting_power_of(state: &StateTree, who: &PartyId) -> u128 {
     StakingPrism::stake_of(state, who).voting_power()
 }
 
+pub fn pending_rewards_of(state: &StateTree, who: &PartyId) -> u128 {
+    let locked = StakingPrism::locked_of(state, who);
+    StakingPrism::pending_reward(state, who, locked)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -600,7 +750,11 @@ mod tests {
             "LUX",
             18,
             &PartyId::new("treasury"),
-            &[(PartyId::new("alice"), 1_000), (PartyId::new("bob"), 1_000)],
+            &[
+                (PartyId::new("alice"), 1_000),
+                (PartyId::new("bob"), 1_000),
+                (PartyId::new("treasury"), 1_000),
+            ],
         )
         .unwrap();
         (StakingPrism::new(), state, id)
@@ -868,5 +1022,95 @@ mod tests {
         );
         assert!(p.handle(&slash, &mut s).is_err());
         assert_eq!(voting_power_of(&s, &PartyId::new("bob")), 1_000);
+    }
+
+    #[test]
+    fn rewards_distribute_proportionally_to_stake() {
+        let (p, mut s, token) = setup();
+
+        let stake = |who: &str, amount: u128, nonce: u64| {
+            staking_command(
+                PartyId::new(who),
+                Visibility::Public,
+                nonce,
+                1,
+                &StakingCommand::Stake { amount },
+            )
+        };
+        p.handle(&stake("alice", 300, 0), &mut s).unwrap();
+        p.handle(&stake("bob", 100, 0), &mut s).unwrap();
+
+        let treasury_before = balance_of(&s, &token, &PartyId::new("treasury"));
+        let fund = staking_command(
+            PartyId::new("treasury"),
+            Visibility::Public,
+            0,
+            2,
+            &StakingCommand::FundRewards { amount: 400 },
+        );
+        p.handle(&fund, &mut s).unwrap();
+        assert_eq!(
+            balance_of(&s, &token, &PartyId::new("treasury")),
+            treasury_before - 400
+        );
+
+        assert_eq!(pending_rewards_of(&s, &PartyId::new("alice")), 300);
+        assert_eq!(pending_rewards_of(&s, &PartyId::new("bob")), 100);
+
+        let alice_before = balance_of(&s, &token, &PartyId::new("alice"));
+        let claim = staking_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            1,
+            3,
+            &StakingCommand::ClaimRewards,
+        );
+        p.handle(&claim, &mut s).unwrap();
+        assert_eq!(
+            balance_of(&s, &token, &PartyId::new("alice")),
+            alice_before + 300
+        );
+        assert_eq!(pending_rewards_of(&s, &PartyId::new("alice")), 0);
+        assert_eq!(pending_rewards_of(&s, &PartyId::new("bob")), 100);
+    }
+
+    #[test]
+    fn staking_after_funding_does_not_claim_past_rewards() {
+        let (p, mut s, _) = setup();
+        p.handle(
+            &staking_command(
+                PartyId::new("alice"),
+                Visibility::Public,
+                0,
+                1,
+                &StakingCommand::Stake { amount: 100 },
+            ),
+            &mut s,
+        )
+        .unwrap();
+        p.handle(
+            &staking_command(
+                PartyId::new("treasury"),
+                Visibility::Public,
+                0,
+                2,
+                &StakingCommand::FundRewards { amount: 100 },
+            ),
+            &mut s,
+        )
+        .unwrap();
+        p.handle(
+            &staking_command(
+                PartyId::new("bob"),
+                Visibility::Public,
+                0,
+                3,
+                &StakingCommand::Stake { amount: 100 },
+            ),
+            &mut s,
+        )
+        .unwrap();
+        assert_eq!(pending_rewards_of(&s, &PartyId::new("alice")), 100);
+        assert_eq!(pending_rewards_of(&s, &PartyId::new("bob")), 0);
     }
 }

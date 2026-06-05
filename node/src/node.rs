@@ -57,6 +57,7 @@ impl Default for Limits {
 pub struct FeePolicy {
     pub price_per_gas: u128,
     pub burn_bps: u16,
+    pub target_gas: u64,
 }
 
 impl Default for FeePolicy {
@@ -64,6 +65,7 @@ impl Default for FeePolicy {
         FeePolicy {
             price_per_gas: 0,
             burn_bps: 5_000,
+            target_gas: 0,
         }
     }
 }
@@ -72,7 +74,13 @@ impl FeePolicy {
     pub fn enabled(&self) -> bool {
         self.price_per_gas > 0
     }
+
+    pub fn dynamic(&self) -> bool {
+        self.enabled() && self.target_gas > 0
+    }
 }
+
+const BASE_PRICE_KEY: &str = "fee/base_price";
 
 pub struct Node {
     pub cascade: Cascade,
@@ -162,17 +170,27 @@ impl Node {
         Ok(true)
     }
 
+    fn base_price(state: &StateTree, policy: FeePolicy) -> u128 {
+        state
+            .get_json::<String>(BASE_PRICE_KEY)
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<u128>().ok())
+            .unwrap_or(policy.price_per_gas)
+    }
+
     fn charge_fee(
         policy: FeePolicy,
+        price: u128,
         state: &mut StateTree,
         payer: &PartyId,
         proposer: &PartyId,
         gas_used: u64,
     ) {
-        if !policy.enabled() {
+        if !policy.enabled() || price == 0 {
             return;
         }
-        let fee = policy.price_per_gas.saturating_mul(gas_used as u128);
+        let fee = price.saturating_mul(gas_used as u128);
         if fee == 0 {
             return;
         }
@@ -184,6 +202,30 @@ impl Node {
             fee,
             policy.burn_bps,
         );
+    }
+
+    fn adjust_base_price(state: &mut StateTree, policy: FeePolicy, block_gas: u64) {
+        if !policy.dynamic() {
+            return;
+        }
+        let current = Self::base_price(state, policy);
+        let target = policy.target_gas as u128;
+        let used = block_gas as u128;
+        let delta = current.max(1) / 8;
+        let next = match used.cmp(&target) {
+            std::cmp::Ordering::Greater => {
+                let scaled = delta.saturating_mul(used - target) / target;
+                current.saturating_add(scaled.max(1))
+            }
+            std::cmp::Ordering::Less => {
+                let scaled = delta.saturating_mul(target - used) / target;
+                current
+                    .saturating_sub(scaled)
+                    .max(policy.price_per_gas.max(1))
+            }
+            std::cmp::Ordering::Equal => current,
+        };
+        let _ = state.put_json(BASE_PRICE_KEY, &next.to_string());
     }
 
     pub fn head(&self) -> &Block {
@@ -261,17 +303,22 @@ impl Node {
         let mut trial_state = self.state.clone();
         let mut all_events = Vec::new();
         let proposer = self.proposer.clone();
+        let price = Self::base_price(&trial_state, self.fee_policy);
+        let mut block_gas = 0u64;
         for cmd in &commands {
             let receipt = self.cascade.apply(cmd.clone(), &mut trial_state)?;
             Self::charge_fee(
                 self.fee_policy,
+                price,
                 &mut trial_state,
                 &cmd.submitter,
                 &proposer,
                 receipt.total_cost,
             );
+            block_gas = block_gas.saturating_add(receipt.total_cost);
             all_events.extend(receipt.events);
         }
+        Self::adjust_base_price(&mut trial_state, self.fee_policy, block_gas);
 
         let mut block = Block {
             height: parent.height + 1,
@@ -295,17 +342,22 @@ impl Node {
         let mut new_state = self.state.clone();
         let mut events = Vec::new();
         let block_proposer = block.proposer.clone();
+        let price = Self::base_price(&new_state, self.fee_policy);
+        let mut block_gas = 0u64;
         for cmd in &block.commands {
             let receipt = self.cascade.apply(cmd.clone(), &mut new_state)?;
             Self::charge_fee(
                 self.fee_policy,
+                price,
                 &mut new_state,
                 &cmd.submitter,
                 &block_proposer,
                 receipt.total_cost,
             );
+            block_gas = block_gas.saturating_add(receipt.total_cost);
             events.extend(receipt.events);
         }
+        Self::adjust_base_price(&mut new_state, self.fee_policy, block_gas);
 
         let recomputed_events_root = {
             let leaves: Vec<Hash> = events.iter().map(|e| e.commitment()).collect();
@@ -373,6 +425,10 @@ impl Node {
 
     pub fn sub_ledger(&self, party: &PartyId) -> Option<&SubLedger> {
         self.sub_ledgers.get(party)
+    }
+
+    pub fn current_base_price(&self) -> u128 {
+        Self::base_price(&self.state, self.fee_policy)
     }
 }
 

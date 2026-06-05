@@ -9,5 +9,6 @@
     { "party": "ecosystem", "amount": 100000000 }
   ],
   "fee_price_per_gas": 0,
-  "fee_burn_bps": 5000
+  "fee_burn_bps": 5000,
+  "fee_target_gas": 0
 }
