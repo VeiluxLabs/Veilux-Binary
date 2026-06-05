@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-06-05
+
+### Security
+- **Audit pass: four vulnerabilities found and fixed**, each with a regression test.
+  - **System-account impersonation (critical).** Keyless pool accounts
+    (`staking/escrow`, `staking/rewards`) could be impersonated via
+    trust-on-first-use key binding and drained. `submit_signed` now rejects any
+    submitter whose name contains `/` or is empty (`ReservedAccount`).
+  - **Slashing bypassed reward accounting.** A slashed validator kept earning
+    reward-pool shares on burned stake (phantom weight) and drifted
+    `total_stake`. Slashing now reduces the offender's reward weight and the
+    global stake total.
+  - **Private blobs leaked in public state.** The Storage Prism wrote raw blob
+    bytes to public state regardless of visibility, exposing `Visibility::Parties`
+    payloads via state queries. Plaintext is now stored publicly only for
+    `Public` blobs; private blob bytes ride in the Veil-sealed event payload.
+  - **Poison-command liveness DoS.** A command that failed at execution aborted
+    the whole block, stalling production. `assemble_block` now probes each
+    command and skips failures (dropping them) instead of aborting.
+- See `docs/security.md` §2.10–2.13 for the full write-up.
+
 ## [0.3.7] - 2026-06-05
 
 ### Added
@@ -257,7 +278,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.8...HEAD
+[0.3.8]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.4...v0.3.5

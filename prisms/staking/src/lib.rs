@@ -651,6 +651,7 @@ impl Prism for StakingPrism {
                         .map_err(|_| PrismError::Internal("slash burn failed".into()))?;
                     rec.self_bonded -= burned;
                     Self::save_stake(state, &rec)?;
+                    Self::update_lock(state, &proof.offender, -(burned as i128))?;
                 }
                 state
                     .put_json(Self::slash_key(&offence), &true)
@@ -1112,5 +1113,62 @@ mod tests {
         .unwrap();
         assert_eq!(pending_rewards_of(&s, &PartyId::new("alice")), 100);
         assert_eq!(pending_rewards_of(&s, &PartyId::new("bob")), 0);
+    }
+
+    #[test]
+    fn slashed_stake_stops_earning_rewards() {
+        use veilux_veil::PartyIdentity;
+        let (p, mut s, _) = setup();
+
+        let stake = |who: &str, amount: u128| {
+            staking_command(
+                PartyId::new(who),
+                Visibility::Public,
+                0,
+                1,
+                &StakingCommand::Stake { amount },
+            )
+        };
+        p.handle(&stake("alice", 500), &mut s).unwrap();
+        p.handle(&stake("bob", 500), &mut s).unwrap();
+
+        let bob_key = PartyIdentity::from_seed("bob", &[7u8; 32]);
+        let proof = EquivocationProof {
+            offender: PartyId::new("bob"),
+            public_key: hex::encode(bob_key.public_key()),
+            message_a: hex::encode(b"A"),
+            signature_a: hex::encode(bob_key.sign_bytes(b"A")),
+            message_b: hex::encode(b"B"),
+            signature_b: hex::encode(bob_key.sign_bytes(b"B")),
+        };
+        p.handle(
+            &staking_command(
+                PartyId::new("watchdog"),
+                Visibility::Public,
+                0,
+                2,
+                &StakingCommand::Slash { proof },
+            ),
+            &mut s,
+        )
+        .unwrap();
+
+        p.handle(
+            &staking_command(
+                PartyId::new("treasury"),
+                Visibility::Public,
+                0,
+                3,
+                &StakingCommand::FundRewards { amount: 900 },
+            ),
+            &mut s,
+        )
+        .unwrap();
+
+        let alice_share = pending_rewards_of(&s, &PartyId::new("alice"));
+        let bob_share = pending_rewards_of(&s, &PartyId::new("bob"));
+        assert_eq!(alice_share, 500);
+        assert_eq!(bob_share, 400);
+        assert_eq!(alice_share + bob_share, 900);
     }
 }

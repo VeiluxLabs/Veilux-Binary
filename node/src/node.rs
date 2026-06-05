@@ -25,6 +25,8 @@ pub enum NodeError {
     },
     #[error("party {0} is bound to a different signing key")]
     KeyMismatch(String),
+    #[error("'{0}' is a reserved/system account and cannot submit commands")]
+    ReservedAccount(String),
     #[error("command too large: {0} bytes")]
     TooLarge(usize),
     #[error("mempool is full")]
@@ -252,6 +254,10 @@ impl Node {
             return Err(NodeError::TooLarge(cmd.payload.len()));
         }
 
+        if cmd.submitter.0.contains('/') || cmd.submitter.0.is_empty() {
+            return Err(NodeError::ReservedAccount(cmd.submitter.0.clone()));
+        }
+
         verify_signed(&signed).map_err(|e| NodeError::BadSignature(e.to_string()))?;
 
         match self.accounts.get(&cmd.submitter) {
@@ -298,15 +304,25 @@ impl Node {
     pub fn assemble_block(&mut self) -> Result<Block, NodeError> {
         let parent = self.head().clone();
         let take = self.mempool.len().min(self.limits.max_block_commands);
-        let commands: Vec<Command> = self.mempool.iter().take(take).cloned().collect();
+        let candidates: Vec<Command> = self.mempool.iter().take(take).cloned().collect();
 
         let mut trial_state = self.state.clone();
         let mut all_events = Vec::new();
+        let mut commands: Vec<Command> = Vec::with_capacity(candidates.len());
+        let mut rejected: Vec<Hash> = Vec::new();
         let proposer = self.proposer.clone();
         let price = Self::base_price(&trial_state, self.fee_policy);
         let mut block_gas = 0u64;
-        for cmd in &commands {
-            let receipt = self.cascade.apply(cmd.clone(), &mut trial_state)?;
+        for cmd in candidates {
+            let mut probe = trial_state.clone();
+            let receipt = match self.cascade.apply(cmd.clone(), &mut probe) {
+                Ok(r) => r,
+                Err(_) => {
+                    rejected.push(cmd.id());
+                    continue;
+                }
+            };
+            trial_state = probe;
             Self::charge_fee(
                 self.fee_policy,
                 price,
@@ -317,8 +333,14 @@ impl Node {
             );
             block_gas = block_gas.saturating_add(receipt.total_cost);
             all_events.extend(receipt.events);
+            commands.push(cmd);
         }
         Self::adjust_base_price(&mut trial_state, self.fee_policy, block_gas);
+
+        if !rejected.is_empty() {
+            let drop: std::collections::HashSet<Hash> = rejected.into_iter().collect();
+            self.mempool.retain(|c| !drop.contains(&c.id()));
+        }
 
         let mut block = Block {
             height: parent.height + 1,
@@ -448,4 +470,102 @@ fn now() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use veilux_kernel::{Cascade, Visibility};
+    use veilux_veil::PartyIdentity;
+
+    fn node() -> Node {
+        let mut cascade = Cascade::new();
+        cascade.install(Box::new(prism_token::TokenPrism::new()));
+        Node::new(PartyId::new("v0"), cascade)
+    }
+
+    #[test]
+    fn system_account_cannot_submit_commands() {
+        let mut n = node();
+        let attacker = PartyIdentity::from_seed("attacker", &[9u8; 32]);
+        for victim in ["staking/escrow", "staking/rewards", "token/meta", ""] {
+            let cmd = prism_token::transfer_command(
+                PartyId::new(victim),
+                Visibility::Public,
+                0,
+                prism_token::native_token_id(),
+                PartyId::new("attacker"),
+                1_000,
+            );
+            let signed = attacker.sign(cmd);
+            assert!(
+                matches!(n.submit_signed(signed), Err(NodeError::ReservedAccount(_))),
+                "submitter '{victim}' must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn normal_party_still_submits() {
+        let mut n = node();
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+        let cmd = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            0,
+            "Gold",
+            "GLD",
+            18,
+            1_000,
+            true,
+        );
+        assert!(n.submit_signed(alice.sign(cmd)).is_ok());
+    }
+
+    #[test]
+    fn poison_command_does_not_stall_block_production() {
+        let mut n = node();
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+
+        let create = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            0,
+            "Gold",
+            "GLD",
+            0,
+            100,
+            true,
+        );
+        n.submit_signed(alice.sign(create)).unwrap();
+        let token = veilux_kernel::Hash::commit("token/id", &[b"alice", b"GLD", b"Gold"]);
+
+        let poison = prism_token::transfer_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            1,
+            token,
+            PartyId::new("bob"),
+            1_000_000,
+        );
+        n.submit_signed(alice.sign(poison)).unwrap();
+
+        let good = prism_token::transfer_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            2,
+            token,
+            PartyId::new("carol"),
+            40,
+        );
+        n.submit_signed(alice.sign(good)).unwrap();
+
+        let summary = n.produce_block().expect("block must be produced");
+        assert!(summary.height >= 1);
+        assert_eq!(
+            prism_token::balance_of(&n.state, &token, &PartyId::new("carol")),
+            40
+        );
+        assert!(n.mempool.is_empty(), "poison command must be dropped");
+    }
 }

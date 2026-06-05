@@ -30,6 +30,12 @@ pub enum StorageEvent {
         size: u64,
         key: String,
     },
+    StoredPrivate {
+        cid: Hash,
+        size: u64,
+        key: String,
+        data: Vec<u8>,
+    },
     Pinned {
         cid: Hash,
         refcount: u64,
@@ -45,6 +51,8 @@ pub enum StorageEvent {
 struct PinRecord {
     refcount: u64,
     size: u64,
+    #[serde(default)]
+    public: bool,
     owner: Option<PartyId>,
 }
 
@@ -97,25 +105,37 @@ impl Prism for StoragePrism {
                 }
                 let cid = Hash::digest(&data);
                 let size = data.len() as u64;
+                let public = matches!(command.visibility, Visibility::Public);
 
-                if !state.contains(&Self::blob_key(&cid)) {
-                    state.put(Self::blob_key(&cid), data);
+                if public && !state.contains(&Self::blob_key(&cid)) {
+                    state.put(Self::blob_key(&cid), data.clone());
                 }
 
                 let mut pin = Self::load_pin(state, &cid);
                 pin.refcount += 1;
                 pin.size = size;
+                pin.public = public;
                 pin.owner = Some(command.submitter.clone());
                 state
                     .put_json(Self::pin_key(&cid), &pin)
                     .map_err(|e| PrismError::Internal(e.to_string()))?;
 
+                let payload = if public {
+                    serde_json::to_vec(&StorageEvent::Stored { cid, size, key }).unwrap_or_default()
+                } else {
+                    serde_json::to_vec(&StorageEvent::StoredPrivate {
+                        cid,
+                        size,
+                        key,
+                        data,
+                    })
+                    .unwrap_or_default()
+                };
                 let event = Event {
                     source_command: command.id(),
                     prism: "storage".into(),
                     visibility: command.visibility.clone(),
-                    payload: serde_json::to_vec(&StorageEvent::Stored { cid, size, key })
-                        .unwrap_or_default(),
+                    payload,
                 };
                 Ok(PrismOutput::single(event, 100 + size * 2))
             }
@@ -271,5 +291,59 @@ mod tests {
         };
         prism.handle(&unpin, &mut state).unwrap();
         assert!(read_blob(&state, &cid).is_none());
+    }
+
+    #[test]
+    fn private_blob_bytes_never_enter_public_state() {
+        let prism = StoragePrism::new();
+        let mut state = StateTree::new();
+        let secret = b"top-secret-contract-bytes".to_vec();
+        let cmd = put_command(
+            PartyId::new("alice"),
+            Visibility::Parties(vec![PartyId::new("alice"), PartyId::new("bob")]),
+            0,
+            "secret.bin",
+            secret.clone(),
+        );
+        let out = prism.handle(&cmd, &mut state).unwrap();
+
+        let cid = Hash::digest(&secret);
+        assert!(
+            read_blob(&state, &cid).is_none(),
+            "private blob must NOT be in public state"
+        );
+        assert_eq!(state.iter_prefix(BLOB_PREFIX).count(), 0);
+
+        let leaked = state
+            .iter_prefix("")
+            .any(|(_, v)| v.windows(secret.len()).any(|w| w == secret.as_slice()));
+        assert!(!leaked, "secret bytes leaked into public state");
+
+        match serde_json::from_slice::<StorageEvent>(&out.events[0].payload).unwrap() {
+            StorageEvent::StoredPrivate {
+                data, cid: ev_cid, ..
+            } => {
+                assert_eq!(data, secret);
+                assert_eq!(ev_cid, cid);
+            }
+            _ => panic!("expected StoredPrivate event carrying the sealed payload"),
+        }
+        assert_eq!(out.events[0].visibility.stakeholders().len(), 2);
+    }
+
+    #[test]
+    fn public_blob_still_readable() {
+        let prism = StoragePrism::new();
+        let mut state = StateTree::new();
+        let cmd = put_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            0,
+            "pub.bin",
+            b"public-data".to_vec(),
+        );
+        prism.handle(&cmd, &mut state).unwrap();
+        let cid = Hash::digest(b"public-data");
+        assert_eq!(read_blob(&state, &cid).unwrap(), b"public-data");
     }
 }

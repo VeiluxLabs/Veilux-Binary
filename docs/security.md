@@ -111,6 +111,51 @@ check.
   debug build. **Recommended hardening:** switch hot arithmetic to
   `saturating_*`/`checked_*` (roadmap).
 
+### 2.10 System-account impersonation (found & fixed)
+- **Check:** Pooled funds live in keyless system accounts (`staking/escrow`,
+  `staking/rewards`). Under trust-on-first-use key binding, could an attacker
+  submit a `token.transfer` as one of these accounts (binding it to their own
+  key) and drain the pool?
+- **Fix:** `submit_signed` now rejects any submitter whose name contains `/` or
+  is empty (`ReservedAccount`). Real parties are flat labels; every system and
+  state-derived account uses `/`, so they can never originate external commands.
+- **Tests:** `node::tests::system_account_cannot_submit_commands`,
+  `normal_party_still_submits`.
+
+### 2.11 Slashing vs. reward accounting (found & fixed)
+- **Check:** Slashing reduced a validator's bonded stake and burned escrow, but
+  did it update the reward-pool weight? If not, a slashed validator keeps
+  earning reward shares on the burned amount (phantom stake) and `total_stake`
+  drifts, letting them siphon the pool.
+- **Fix:** the slash handler now calls `update_lock(offender, -burned)`, which
+  harvests pending rewards and reduces both the offender's reward weight and the
+  global `total_stake`.
+- **Test:** `staking::tests::slashed_stake_stops_earning_rewards`.
+
+### 2.12 Private blob plaintext in public state (found & fixed)
+- **Check:** The Storage Prism wrote raw blob bytes to public state at
+  `storage/blob/<cid>` regardless of visibility, so a `Visibility::Parties`
+  blob's contents were readable by anyone via `explorer_statePrefix` /
+  `veilux_getState` — contradicting the privacy claim.
+- **Fix:** plaintext is stored in public state **only for `Public` blobs**. A
+  private put keeps just the size/commitment pin record on-chain; the bytes ride
+  in the sealed event payload (`StoredPrivate`) delivered to stakeholders via
+  Veil. The AI Prism's large-result offload propagates the inference's
+  visibility, so private inference outputs are covered too.
+- **Tests:** `storage::tests::private_blob_bytes_never_enter_public_state`,
+  `public_blob_still_readable`.
+
+### 2.13 Poison-command liveness DoS (found & fixed)
+- **Check:** A command valid at submit time can fail at execution (e.g. its
+  balance was spent by an earlier command in the same block). `assemble_block`
+  used `?`, so one failing command aborted the **entire block** — a cheap way to
+  stall block production indefinitely.
+- **Fix:** `assemble_block` now executes each candidate against a probe clone and
+  **skips** any that fail (dropping them from the mempool), so a poison command
+  can never block the good ones. `commit_block` stays strict (a failure there
+  means a lying proposer and the block is rejected).
+- **Test:** `node::tests::poison_command_does_not_stall_block_production`.
+
 ---
 
 ## 3. Residual risks / out of scope (current build)
