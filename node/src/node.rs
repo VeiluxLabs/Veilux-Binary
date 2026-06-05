@@ -734,10 +734,16 @@ mod tests {
             .collect();
 
         let t_submit = Instant::now();
-        for s in signed {
+        for s in signed.clone() {
             n.submit_signed(s).unwrap();
         }
         let submit_secs = t_submit.elapsed().as_secs_f64();
+
+        let t_batch = Instant::now();
+        let results = veilux_veil::verify_signed_batch(&signed);
+        let batch_secs = t_batch.elapsed().as_secs_f64();
+        assert!(results.iter().all(|r| r.is_ok()));
+        let batch_tps = n_tx as f64 / batch_secs;
 
         let t_block = Instant::now();
         let summary = n.produce_block().unwrap();
@@ -752,9 +758,10 @@ mod tests {
             "\n=== VEILUX TPS (single-node, in-memory, token transfer) ===\n\
              tx                : {n_tx}\n\
              included in block : {included}\n\
-             ingest (verify+mempool) : {ingest_tps:.0} tx/s ({submit_secs:.3}s)\n\
-             execute+state_root      : {exec_tps:.0} tx/s ({block_secs:.3}s)\n\
-             end-to-end              : {e2e_tps:.0} tx/s\n"
+             ingest serial (verify+mempool) : {ingest_tps:.0} tx/s ({submit_secs:.3}s)\n\
+             verify batch (parallel)        : {batch_tps:.0} tx/s ({batch_secs:.3}s)\n\
+             execute+state_root             : {exec_tps:.0} tx/s ({block_secs:.3}s)\n\
+             end-to-end                     : {e2e_tps:.0} tx/s\n"
         );
 
         assert_eq!(included, n_tx);

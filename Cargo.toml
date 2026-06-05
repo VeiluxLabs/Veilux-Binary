@@ -22,7 +22,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = ["nathan <nathan@winnode.xyz>"]
 license = "MIT OR Apache-2.0"
@@ -63,7 +63,7 @@ prism-confidential = { path = "prisms/confidential" }
 veilux-evm = { path = "evm" }
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"

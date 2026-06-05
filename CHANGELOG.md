@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-05
+
+### Changed
+- **~40–70× throughput improvement.** The release profile used `opt-level = "z"`
+  (optimize for size), which crippled the elliptic-curve cryptography and made
+  signature verification the bottleneck (~255 tx/s ingest). Switched to
+  `opt-level = 3`. Measured single-node, in-memory throughput on a token-transfer
+  workload jumped to **~18,000 tx/s serial ingest, ~33,000 tx/s execution, and
+  ~11,700 tx/s end-to-end**. The release binary grows from ~0.9 MB to ~2.9 MB —
+  a worthwhile trade for a >40× speedup (still tiny for a node).
+
+### Added
+- **Parallel batch signature verification** (`verify_signed_batch`, rayon) —
+  ~44,000 tx/s verifying a block's commands across cores.
+- **`veilux_getAccount` RPC** — returns an account's next nonce, key-bound
+  status, bound public key, and native balance, so clients can build correctly
+  ordered transactions and check inclusion without scraping raw state. Exposed in
+  the Rust SDK (`get_account`).
+
 ## [0.5.0] - 2026-06-05
 
 ### Added
@@ -345,7 +364,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.9...v0.4.0
 [0.3.9]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.8...v0.3.9

@@ -196,6 +196,15 @@ pub struct CommandLocation {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AccountView {
+    pub party: String,
+    pub bound: bool,
+    pub public_key: Option<String>,
+    pub next_nonce: u64,
+    pub native_balance: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StateEntry {
     pub key: String,
     pub value_hex: String,

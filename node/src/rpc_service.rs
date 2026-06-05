@@ -112,6 +112,28 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
             }
         }
 
+        method::GET_ACCOUNT => {
+            let party = req.params.get("party").and_then(|v| v.as_str());
+            let Some(party) = party else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'party'");
+            };
+            let pid = veilux_kernel::PartyId::new(party);
+            let n = node.lock().await;
+            let bound_key = n.accounts.get(&pid);
+            let next_nonce = n.nonces.get(&pid).map(|x| x + 1).unwrap_or(0);
+            let bal = prism_token::balance_of(&n.state, &prism_token::native_token_id(), &pid);
+            ok(
+                id,
+                veilux_rpc::types::AccountView {
+                    party: party.to_string(),
+                    bound: bound_key.is_some(),
+                    public_key: bound_key.map(hex::encode),
+                    next_nonce,
+                    native_balance: bal.to_string(),
+                },
+            )
+        }
+
         method::SUBMIT => {
             let Some(params) = parse_submit(&req) else {
                 return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'command'");

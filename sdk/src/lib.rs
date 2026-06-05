@@ -2,9 +2,9 @@ use serde_json::json;
 
 pub use veilux_kernel::{Command, Hash, PartyId, SignedCommand, Visibility};
 pub use veilux_rpc::types::{
-    BlockView, ChainStats, CommandLocation, ContractCode, EstimateResult, EventView, NodeInfo,
-    StateEntry, StatePrefixResult, StateResult, SubmitParams, SubmitResult, VerificationRecord,
-    VerifyRequest, VerifyResult,
+    AccountView, BlockView, ChainStats, CommandLocation, ContractCode, EstimateResult, EventView,
+    NodeInfo, StateEntry, StatePrefixResult, StateResult, SubmitParams, SubmitResult,
+    VerificationRecord, VerifyRequest, VerifyResult,
 };
 pub use veilux_rpc::{method, RpcRequest, RpcResponse};
 pub use veilux_veil::PartyIdentity;
@@ -78,6 +78,10 @@ impl Client {
 
     pub fn get_state(&self, key: &str) -> Result<StateResult, SdkError> {
         self.call(method::GET_STATE, json!({ "key": key }))
+    }
+
+    pub fn get_account(&self, party: &str) -> Result<AccountView, SdkError> {
+        self.call(method::GET_ACCOUNT, json!({ "party": party }))
     }
 
     pub fn estimate(&self, command: &SignedCommand) -> Result<EstimateResult, SdkError> {

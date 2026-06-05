@@ -113,6 +113,11 @@ pub fn verify_signed(signed: &SignedCommand) -> Result<(), IdentityError> {
         .map_err(|_| IdentityError::VerificationFailed)
 }
 
+pub fn verify_signed_batch(signed: &[SignedCommand]) -> Vec<Result<(), IdentityError>> {
+    use rayon::prelude::*;
+    signed.par_iter().map(verify_signed).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
