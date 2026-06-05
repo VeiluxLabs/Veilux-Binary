@@ -49,11 +49,18 @@ impl PartyIdentity {
     }
 
     pub fn sign(&self, command: Command) -> SignedCommand {
-        let sig: Signature = self.signing_key.sign(&command.signing_bytes());
+        self.sign_for_chain(command, 0)
+    }
+
+    pub fn sign_for_chain(&self, command: Command, chain_id: u64) -> SignedCommand {
+        let sig: Signature = self
+            .signing_key
+            .sign(&command.signing_bytes_for_chain(chain_id));
         SignedCommand {
             command,
             public_key: self.public_key().to_vec(),
             signature: sig.to_bytes().to_vec(),
+            chain_id,
         }
     }
 
@@ -99,7 +106,10 @@ pub fn verify_signed(signed: &SignedCommand) -> Result<(), IdentityError> {
     let signature = Signature::from_bytes(&sig_bytes);
 
     verifying_key
-        .verify(&signed.command.signing_bytes(), &signature)
+        .verify(
+            &signed.command.signing_bytes_for_chain(signed.chain_id),
+            &signature,
+        )
         .map_err(|_| IdentityError::VerificationFailed)
 }
 
@@ -147,5 +157,38 @@ mod tests {
         let seed = id.secret_seed();
         let id2 = PartyIdentity::from_seed("alice", &seed);
         assert_eq!(id.public_key(), id2.public_key());
+    }
+
+    #[test]
+    fn chain_bound_signature_roundtrips() {
+        let id = PartyIdentity::generate("alice");
+        let signed = id.sign_for_chain(cmd(id.party(), 0), 42);
+        assert_eq!(signed.chain_id, 42);
+        assert!(verify_signed(&signed).is_ok());
+    }
+
+    #[test]
+    fn signature_does_not_replay_across_chains() {
+        let id = PartyIdentity::generate("alice");
+        let mut signed = id.sign_for_chain(cmd(id.party(), 0), 42);
+        signed.chain_id = 99;
+        assert!(
+            verify_signed(&signed).is_err(),
+            "a signature for chain 42 must not verify as chain 99"
+        );
+        signed.chain_id = 0;
+        assert!(
+            verify_signed(&signed).is_err(),
+            "a signature for chain 42 must not verify as legacy chain 0"
+        );
+    }
+
+    #[test]
+    fn legacy_chain_zero_matches_plain_signing() {
+        let id = PartyIdentity::generate("alice");
+        let c = cmd(id.party(), 7);
+        assert_eq!(c.signing_bytes(), c.signing_bytes_for_chain(0));
+        let signed = id.sign_for_chain(c, 0);
+        assert!(verify_signed(&signed).is_ok());
     }
 }

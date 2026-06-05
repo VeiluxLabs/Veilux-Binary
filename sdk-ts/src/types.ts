@@ -25,6 +25,7 @@ export interface SignedCommand {
   command: Command;
   public_key: number[];
   signature: number[];
+  chain_id: number;
 }
 
 // ---- RPC contract types (mirror veilux-rpc::types) ----

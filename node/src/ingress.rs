@@ -37,6 +37,22 @@ async fn dispatch(state: IngressState, req: RpcRequest) -> RpcResponse {
             let Some(signed) = signed else {
                 return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'command'");
             };
+            if signed.chain_id != state.chain_id {
+                return RpcResponse::err(
+                    id,
+                    codes::COMMAND_REJECTED,
+                    format!(
+                        "wrong chain id: command signed for {}, this chain is {}",
+                        signed.chain_id, state.chain_id
+                    ),
+                );
+            }
+            if veilux_veil::verify_signed(&signed).is_err() {
+                return RpcResponse::err(id, codes::COMMAND_REJECTED, "invalid signature");
+            }
+            if signed.command.submitter.0.contains('/') || signed.command.submitter.0.is_empty() {
+                return RpcResponse::err(id, codes::COMMAND_REJECTED, "reserved account");
+            }
             let command_id = signed.command.id().to_hex();
             match state.tx.send(signed) {
                 Ok(()) => ok(

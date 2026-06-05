@@ -27,6 +27,8 @@ pub enum NodeError {
     KeyMismatch(String),
     #[error("'{0}' is a reserved/system account and cannot submit commands")]
     ReservedAccount(String),
+    #[error("wrong chain id: command signed for {got}, this chain is {expected}")]
+    WrongChainId { got: u64, expected: u64 },
     #[error("command too large: {0} bytes")]
     TooLarge(usize),
     #[error("mempool is full")]
@@ -103,6 +105,7 @@ pub struct Node {
     pub nonces: HashMap<PartyId, u64>,
     pub limits: Limits,
     pub fee_policy: FeePolicy,
+    pub chain_id: u64,
     pub store: Option<Store>,
 }
 
@@ -121,6 +124,7 @@ impl Node {
             nonces: HashMap::new(),
             limits: Limits::default(),
             fee_policy: FeePolicy::default(),
+            chain_id: 0,
             store: None,
         }
     }
@@ -263,6 +267,13 @@ impl Node {
 
         if cmd.submitter.0.contains('/') || cmd.submitter.0.is_empty() {
             return Err(NodeError::ReservedAccount(cmd.submitter.0.clone()));
+        }
+
+        if signed.chain_id != self.chain_id {
+            return Err(NodeError::WrongChainId {
+                got: signed.chain_id,
+                expected: self.chain_id,
+            });
         }
 
         verify_signed(&signed).map_err(|e| NodeError::BadSignature(e.to_string()))?;
@@ -657,5 +668,29 @@ mod tests {
             "create costs 5000 gas; only one fits under a 6000 gas limit, got {}",
             block.commands.len()
         );
+    }
+
+    #[test]
+    fn wrong_chain_id_is_rejected() {
+        let mut n = node();
+        n.chain_id = 42;
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+        let cmd = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            0,
+            "Gold",
+            "GLD",
+            0,
+            1_000,
+            true,
+        );
+        let wrong = alice.sign_for_chain(cmd.clone(), 7);
+        assert!(matches!(
+            n.submit_signed(wrong),
+            Err(NodeError::WrongChainId { .. })
+        ));
+        let right = alice.sign_for_chain(cmd, 42);
+        assert!(n.submit_signed(right).is_ok());
     }
 }

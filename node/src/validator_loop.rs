@@ -117,6 +117,7 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
             })
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         node.fee_policy = spec.fee_policy();
+        node.chain_id = spec.chain_id;
         if seeded {
             info!(
                 token = %spec.token_symbol,
@@ -402,7 +403,7 @@ fn build_local_block(
         "block-heartbeat",
         format!("h{height}").into_bytes(),
     );
-    node.submit_signed(identity.sign(heartbeat))
+    node.submit_signed(identity.sign_for_chain(heartbeat, node.chain_id))
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let block = node
         .assemble_block()
@@ -440,7 +441,7 @@ async fn detect_equivocation(eng: &mut Engine, net: &NetHandle, vote: &Vote) {
         eng.height,
         &prism_staking::StakingCommand::Slash { proof },
     );
-    let signed = eng.identity.sign(cmd);
+    let signed = eng.identity.sign_for_chain(cmd, eng.node.chain_id);
     if eng.node.submit_signed(signed.clone()).is_ok() {
         let _ = net.net.broadcast(&NetMessage::Command(Box::new(signed)));
     }

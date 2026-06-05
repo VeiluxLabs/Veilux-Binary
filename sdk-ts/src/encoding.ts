@@ -59,6 +59,22 @@ export function signingBytes(cmd: Command): Uint8Array {
 }
 
 /**
+ * Chain-bound signing bytes (EIP-155 style). `chainId = 0` is identical to
+ * `signingBytes` (legacy/dev). A nonzero chain id appends a domain-separated
+ * suffix so a signature is only valid on its intended chain.
+ */
+export function signingBytesForChain(cmd: Command, chainId: number): Uint8Array {
+  const base = signingBytes(cmd);
+  if (chainId === 0) return base;
+  return concat(
+    base,
+    new Uint8Array([0xff]),
+    textEncoder.encode("chain"),
+    u64le(chainId),
+  );
+}
+
+/**
  * Reproduce `Hash::commit(domain, parts)`:
  *   blake3(domain || 0xff || for each part: len_le_u64 || part)
  */

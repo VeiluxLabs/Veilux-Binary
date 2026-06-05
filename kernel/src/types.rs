@@ -86,6 +86,16 @@ impl Command {
         v.extend_from_slice(&self.payload);
         v
     }
+
+    pub fn signing_bytes_for_chain(&self, chain_id: u64) -> Vec<u8> {
+        let mut v = self.signing_bytes();
+        if chain_id != 0 {
+            v.push(0xff);
+            v.extend_from_slice(b"chain");
+            v.extend_from_slice(&chain_id.to_le_bytes());
+        }
+        v
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -93,6 +103,8 @@ pub struct SignedCommand {
     pub command: Command,
     pub public_key: Vec<u8>,
     pub signature: Vec<u8>,
+    #[serde(default)]
+    pub chain_id: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

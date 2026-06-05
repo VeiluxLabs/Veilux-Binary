@@ -107,6 +107,7 @@ impl RoundMachine {
             info!(height = self.height, %hash, "proposing block to network");
             let (vote_actions, _) = self.cast_own_vote(me, hash, VoteKind::Prevote, aurora);
             actions.extend(vote_actions);
+            self.try_advance_after_prevote(me, hash, aurora, &mut actions);
         }
         actions
     }
@@ -131,10 +132,33 @@ impl RoundMachine {
         if aurora.validators.is_validator(me) && self.phase == Phase::Idle {
             self.phase = Phase::Prevoted;
             debug!(height = self.height, %hash, "casting prevote");
-            let (actions, _) = self.cast_own_vote(me, hash, VoteKind::Prevote, aurora);
+            let (mut actions, _) = self.cast_own_vote(me, hash, VoteKind::Prevote, aurora);
+            self.try_advance_after_prevote(me, hash, aurora, &mut actions);
             return actions;
         }
         vec![Action::None]
+    }
+
+    fn try_advance_after_prevote(
+        &mut self,
+        me: &PartyId,
+        block_hash: Hash,
+        aurora: &mut Aurora,
+        actions: &mut Vec<Action>,
+    ) {
+        if self.phase == Phase::Prevoted
+            && aurora.has_prevote_quorum(self.height, self.round, &block_hash)
+            && aurora.validators.is_validator(me)
+        {
+            self.phase = Phase::Precommitted;
+            debug!(height = self.height, %block_hash, "prevote quorum -> precommit (self)");
+            let (pc_actions, pc_outcome) =
+                self.cast_own_vote(me, block_hash, VoteKind::Precommit, aurora);
+            actions.extend(pc_actions);
+            if let Some(o) = pc_outcome {
+                self.collect_commit(&o, actions);
+            }
+        }
     }
 
     pub fn on_vote(&mut self, vote: Vote, me: &PartyId, aurora: &mut Aurora) -> Vec<Action> {
@@ -213,6 +237,24 @@ mod tests {
         b.parent = parent;
         b.events_root = b.compute_events_root();
         b
+    }
+
+    #[test]
+    fn single_validator_self_finalizes() {
+        let vs = validators(&["v1"]);
+        let me = PartyId::new("v1");
+        let mut aurora = Aurora::new(ConsensusConfig::default(), vs, Some(me.clone()));
+        let mut machine = RoundMachine::new_round(1, 0);
+        let block = block_at(1, Hash::ZERO, "v1");
+        let block_hash = block.hash();
+
+        let acts = machine.on_local_proposal(block, &me, &mut aurora);
+        assert!(
+            acts.iter()
+                .any(|a| matches!(a, Action::Commit(h) if *h == block_hash)),
+            "a lone validator must finalize from its own votes without any network input"
+        );
+        assert_eq!(machine.phase, Phase::Committed);
     }
 
     #[test]

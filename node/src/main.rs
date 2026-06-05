@@ -119,6 +119,7 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         })
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     node.fee_policy = spec.fee_policy();
+    node.chain_id = spec.chain_id;
 
     println!("VEILUX dev RPC node");
     println!("  rpc      : http://{addr}");

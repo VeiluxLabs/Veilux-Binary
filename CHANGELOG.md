@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-05
+
+### Added
+- **Chain-id replay protection (EIP-155 style).** Signatures are now bound to a
+  chain via `SignedCommand.chain_id`: `signing_bytes_for_chain` appends a
+  domain-separated `chain<id_le>` suffix for nonzero ids (id 0 stays
+  byte-identical to the legacy scheme, so existing vectors and dev flows are
+  unchanged). The node rejects any command whose `chain_id` differs from its own
+  (`WrongChainId`), and the validator tx-ingress rejects it up front with a clear
+  error. `chain_id` is set in the genesis spec and surfaced via `veilux_chainId`.
+  The TypeScript SDK gained `signForChain` / `signingBytesForChain`; cross-language
+  byte-compatibility is preserved (compat vectors still pass). Verified live: a
+  command signed for the wrong chain is refused, the right one is finalized.
+
+### Fixed
+- **Single-validator (and self-quorum) liveness.** A validator that already held
+  a prevote quorum from its own vote never advanced past the prevote phase,
+  because the prevote→precommit transition only ran when a vote arrived over the
+  network. A lone validator therefore produced **zero blocks** (it appeared
+  "stuck/slow"). The round machine now self-checks quorum immediately after
+  casting its own prevote, so a single validator finalizes on its own timer while
+  multi-node finality is unchanged (the self-check only fires when quorum already
+  exists). Regression test `single_validator_self_finalizes` added; the 4-node
+  finality test still passes and a live 3-node run still finalizes at quorum 201.
+
 ## [0.3.9] - 2026-06-05
 
 ### Added
@@ -301,7 +326,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.9...v0.4.0
 [0.3.9]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.6...v0.3.7

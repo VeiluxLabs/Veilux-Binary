@@ -2,7 +2,7 @@ import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha512";
 import { blake3 } from "@noble/hashes/blake3";
 import type { Command, PartyId, SignedCommand } from "./types.js";
-import { signingBytes } from "./encoding.js";
+import { signingBytes, signingBytesForChain } from "./encoding.js";
 
 // @noble/ed25519 v2 needs sha512 wired up for synchronous signing.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed.etc.concatBytes(...m));
@@ -47,12 +47,21 @@ export class PartyIdentity {
 
   /** Sign a command, producing a SignedCommand ready for submission. */
   sign(command: Command): SignedCommand {
-    const msg = signingBytes(command);
+    return this.signForChain(command, 0);
+  }
+
+  /**
+   * Sign a command bound to a specific chain id (replay protection). Use the
+   * chain's `chain_id` (from `veilux_chainId` / genesis); 0 = legacy/dev.
+   */
+  signForChain(command: Command, chainId: number): SignedCommand {
+    const msg = signingBytesForChain(command, chainId);
     const signature = ed.sign(msg, this.secret);
     return {
       command,
       public_key: Array.from(this.publicKey()),
       signature: Array.from(signature),
+      chain_id: chainId,
     };
   }
 }
