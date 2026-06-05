@@ -10,5 +10,7 @@
   ],
   "fee_price_per_gas": 0,
   "fee_burn_bps": 5000,
-  "fee_target_gas": 0
+  "fee_target_gas": 0,
+  "chain_id": 1,
+  "network": "veilux-dev"
 }

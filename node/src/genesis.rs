@@ -16,10 +16,22 @@ pub struct ChainSpec {
     pub fee_burn_bps: u16,
     #[serde(default)]
     pub fee_target_gas: u64,
+    #[serde(default = "default_chain_id")]
+    pub chain_id: u64,
+    #[serde(default = "default_network")]
+    pub network: String,
 }
 
 fn default_burn_bps() -> u16 {
     5_000
+}
+
+fn default_chain_id() -> u64 {
+    1
+}
+
+fn default_network() -> String {
+    "veilux-dev".to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -42,6 +54,8 @@ impl Default for ChainSpec {
             fee_price_per_gas: 0,
             fee_burn_bps: default_burn_bps(),
             fee_target_gas: 0,
+            chain_id: default_chain_id(),
+            network: default_network(),
         }
     }
 }

@@ -205,6 +205,43 @@ veilux validator --name v3 --seed v3seed --listen 127.0.0.1:33003 \
 You'll see `block committed by BFT quorum ... power=300 quorum=201` and all
 three data directories grow the chain in lockstep with byte-identical blocks.
 
+### Submitting user transactions to a validator
+
+A validator is consensus-only by default. Add `--rpc ADDR` to open a
+**transaction-ingress** JSON-RPC endpoint:
+
+```bash
+veilux validator --name v1 --seed v1seed --listen 127.0.0.1:33001 \
+  --peer v2:v2seed --peer v3:v3seed --rpc 127.0.0.1:8645 \
+  --genesis genesis.json --datadir ./d1
+```
+
+Clients submit with the normal `veilux_submit` method (Rust/TS SDK). The
+validator validates the signed command, adds it to its mempool, and **gossips
+it** (`NetMessage::Command`) to the rest of the network, so whichever validator
+proposes next includes it. The ingress also answers `veilux_blockNumber`,
+`veilux_chainId`, and `veilux_nodeInfo` (it is submit + read-lite; for full
+read/explorer queries run a `veilux serve` node against the same data, or query
+any node's state). Verified end-to-end: a transfer submitted to one validator is
+BFT-finalized across all of them and applied to state.
+
+### Block validity rules (enforced on commit)
+
+Every node re-executes a proposed block and rejects it unless:
+
+- `parent`/`height` extend the local head, and `events_root` + `state_root`
+  match the re-executed result (no lying proposer);
+- `timestamp >= parent.timestamp` and not more than 2 hours ahead of local time
+  (`BadTimestamp`);
+- total gas used ≤ `Limits::max_block_gas` (default 30,000,000) (`BlockGasExceeded`).
+
+Block assembly additionally skips any command that fails execution (so a poison
+command cannot stall production) and stops including commands once the block
+would exceed the gas limit.
+
+The native token, fees, and a `chain_id` / `network` label are set in the
+genesis spec (`--genesis`). `chain_id` is surfaced via `veilux_chainId`.
+
 ```bash
 cargo test -p veilux-consensus -p veilux-store -p veilux-network
 cargo test -p veilux-node driver   # deterministic 4-validator finality test

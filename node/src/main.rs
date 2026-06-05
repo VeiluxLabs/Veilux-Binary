@@ -1,5 +1,6 @@
 mod driver;
 mod genesis;
+mod ingress;
 mod node;
 mod rpc_service;
 mod slash_watch;
@@ -50,7 +51,7 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!(
-                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645)\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR] [--secure] [--allow-ip IP]\n  veilux version       print version"
+                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645)\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR] [--secure] [--allow-ip IP] [--rpc ADDR]\n  veilux version       print version"
             );
             std::process::exit(1);
         }
@@ -223,6 +224,12 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         None => Some(genesis::ChainSpec::default()),
     };
 
+    let rpc_addr = args
+        .iter()
+        .position(|a| a == "--rpc")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+
     let cfg = validator_loop::ValidatorConfig {
         name,
         seed: seed_from(&seed_str),
@@ -234,6 +241,7 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         secure,
         ip_allowlist,
         genesis,
+        rpc_addr,
     };
 
     let rt = tokio::runtime::Builder::new_multi_thread()

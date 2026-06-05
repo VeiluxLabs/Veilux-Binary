@@ -35,6 +35,10 @@ pub enum NodeError {
     Store(String),
     #[error("block parent/height does not extend the current head")]
     BadParent,
+    #[error("block timestamp {got} is not >= parent {parent} (or too far in the future)")]
+    BadTimestamp { got: u64, parent: u64 },
+    #[error("block exceeds gas limit: used {used}, limit {limit}")]
+    BlockGasExceeded { used: u64, limit: u64 },
     #[error("{0} mismatch: block does not match re-executed result")]
     RootMismatch(String),
 }
@@ -42,6 +46,7 @@ pub enum NodeError {
 pub struct Limits {
     pub max_payload_bytes: usize,
     pub max_block_commands: usize,
+    pub max_block_gas: u64,
     pub max_mempool: usize,
 }
 
@@ -50,6 +55,7 @@ impl Default for Limits {
         Limits {
             max_payload_bytes: 1024 * 1024,
             max_block_commands: 10_000,
+            max_block_gas: 30_000_000,
             max_mempool: 100_000,
         }
     }
@@ -83,6 +89,7 @@ impl FeePolicy {
 }
 
 const BASE_PRICE_KEY: &str = "fee/base_price";
+const MAX_FUTURE_DRIFT_SECS: u64 = 7_200;
 
 pub struct Node {
     pub cascade: Cascade,
@@ -322,6 +329,9 @@ impl Node {
                     continue;
                 }
             };
+            if block_gas.saturating_add(receipt.total_cost) > self.limits.max_block_gas {
+                break;
+            }
             trial_state = probe;
             Self::charge_fee(
                 self.fee_policy,
@@ -347,7 +357,7 @@ impl Node {
             parent: parent.hash(),
             events_root: Hash::ZERO,
             state_root: trial_state.root(),
-            timestamp: now(),
+            timestamp: now().max(parent.timestamp),
             proposer: self.proposer.clone(),
             events: all_events,
             commands,
@@ -359,6 +369,15 @@ impl Node {
     pub fn commit_block(&mut self, mut block: Block) -> Result<BlockSummary, NodeError> {
         if block.parent != self.head().hash() || block.height != self.head().height + 1 {
             return Err(NodeError::BadParent);
+        }
+
+        let parent_ts = self.head().timestamp;
+        let future_bound = now().saturating_add(MAX_FUTURE_DRIFT_SECS);
+        if block.timestamp < parent_ts || block.timestamp > future_bound {
+            return Err(NodeError::BadTimestamp {
+                got: block.timestamp,
+                parent: parent_ts,
+            });
         }
 
         let mut new_state = self.state.clone();
@@ -378,6 +397,12 @@ impl Node {
             );
             block_gas = block_gas.saturating_add(receipt.total_cost);
             events.extend(receipt.events);
+        }
+        if block_gas > self.limits.max_block_gas {
+            return Err(NodeError::BlockGasExceeded {
+                used: block_gas,
+                limit: self.limits.max_block_gas,
+            });
         }
         Self::adjust_base_price(&mut new_state, self.fee_policy, block_gas);
 
@@ -567,5 +592,70 @@ mod tests {
             40
         );
         assert!(n.mempool.is_empty(), "poison command must be dropped");
+    }
+
+    #[test]
+    fn block_rejects_bad_timestamp() {
+        let mut n = node();
+        let parent = n.head().clone();
+        if parent.timestamp > 0 {
+            let mut block = veilux_kernel::Block {
+                height: parent.height + 1,
+                parent: parent.hash(),
+                events_root: Hash::ZERO,
+                state_root: n.state.root(),
+                timestamp: parent.timestamp - 1,
+                proposer: PartyId::new("v0"),
+                events: vec![],
+                commands: vec![],
+            };
+            block.events_root = block.compute_events_root();
+            assert!(matches!(
+                n.commit_block(block),
+                Err(NodeError::BadTimestamp { .. })
+            ));
+        }
+
+        let mut future = veilux_kernel::Block {
+            height: parent.height + 1,
+            parent: parent.hash(),
+            events_root: Hash::ZERO,
+            state_root: n.state.root(),
+            timestamp: now() + 100_000,
+            proposer: PartyId::new("v0"),
+            events: vec![],
+            commands: vec![],
+        };
+        future.events_root = future.compute_events_root();
+        assert!(matches!(
+            n.commit_block(future),
+            Err(NodeError::BadTimestamp { .. })
+        ));
+    }
+
+    #[test]
+    fn block_gas_limit_caps_inclusion() {
+        let mut n = node();
+        n.limits.max_block_gas = 6_000;
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+        for nonce in 0..5u64 {
+            let cmd = prism_token::create_command(
+                PartyId::new("alice"),
+                Visibility::Public,
+                nonce,
+                &format!("T{nonce}"),
+                &format!("T{nonce}"),
+                0,
+                1_000,
+                false,
+            );
+            n.submit_signed(alice.sign(cmd)).unwrap();
+        }
+        let block = n.assemble_block().unwrap();
+        assert!(
+            block.commands.len() <= 1,
+            "create costs 5000 gas; only one fits under a 6000 gas limit, got {}",
+            block.commands.len()
+        );
     }
 }

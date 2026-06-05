@@ -1,14 +1,17 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use veilux_consensus::{Aurora, ConsensusConfig, Validator, ValidatorSet, Vote};
-use veilux_kernel::{Cascade, PartyId, Visibility};
+use veilux_kernel::{Cascade, PartyId, SignedCommand, Visibility};
 use veilux_network::{AuthConfig, NetConfig, NetHandle, NetMessage, Network, PeerKey, ViewChange};
 use veilux_store::Store;
 use veilux_veil::PartyIdentity;
 
 use crate::driver::{Action, Outbound, Phase, RoundMachine};
+use crate::ingress::{serve_ingress, IngressState};
 use crate::node::Node;
 use crate::slash_watch::EquivocationWatch;
 use crate::viewsync::ViewCoordinator;
@@ -24,6 +27,7 @@ pub struct ValidatorConfig {
     pub secure: bool,
     pub ip_allowlist: Vec<std::net::IpAddr>,
     pub genesis: Option<crate::genesis::ChainSpec>,
+    pub rpc_addr: Option<String>,
 }
 
 const VIEW_TIMEOUT_TICKS: u32 = 3;
@@ -161,6 +165,7 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
     );
 
     let start_height = node.head().height + 1;
+    let head_height = Arc::new(Mutex::new(node.head().height));
     let mut eng = Engine {
         node,
         aurora,
@@ -174,6 +179,26 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         slash_watch: EquivocationWatch::new(),
     };
 
+    let (ingress_tx, mut ingress_rx) = tokio::sync::mpsc::unbounded_channel::<SignedCommand>();
+    if let Some(rpc_addr) = cfg.rpc_addr.clone() {
+        let (chain_id, network) = cfg
+            .genesis
+            .as_ref()
+            .map(|g| (g.chain_id, g.network.clone()))
+            .unwrap_or((1, "veilux-dev".to_string()));
+        let state = IngressState {
+            tx: ingress_tx,
+            height: Arc::clone(&head_height),
+            network,
+            chain_id,
+        };
+        tokio::spawn(async move {
+            if let Err(e) = serve_ingress(rpc_addr, state).await {
+                warn!(error = %e, "ingress RPC stopped");
+            }
+        });
+    }
+
     let mut ticker = tokio::time::interval(Duration::from_secs(cfg.block_interval_secs.max(1)));
     let shutdown = tokio::signal::ctrl_c();
     tokio::pin!(shutdown);
@@ -182,10 +207,20 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         tokio::select! {
             _ = ticker.tick() => {
                 on_tick(&mut eng, &net).await;
+                *head_height.lock().await = eng.node.head().height;
             }
             maybe_msg = net.inbound.recv() => {
                 let Some(msg) = maybe_msg else { break; };
                 handle_message(msg, &net, &mut eng).await;
+                *head_height.lock().await = eng.node.head().height;
+            }
+            Some(signed) = ingress_rx.recv() => {
+                match eng.node.submit_signed(signed.clone()) {
+                    Ok(()) => {
+                        let _ = net.net.broadcast(&NetMessage::Command(Box::new(signed)));
+                    }
+                    Err(e) => debug!(error = %e, "rejected ingress command"),
+                }
             }
             _ = &mut shutdown => {
                 info!("shutdown requested");

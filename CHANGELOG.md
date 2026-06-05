@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-06-05
+
+### Added
+- **Validator transaction ingress.** `veilux validator --rpc ADDR` now opens a
+  JSON-RPC endpoint that accepts `veilux_submit`, validates the signed command,
+  adds it to the mempool, and **gossips it to the network** so the next proposer
+  includes it — closing the gap where a multi-validator network had no way to
+  receive user transactions (only the single-node `veilux serve` did). The
+  endpoint also answers `veilux_blockNumber`, `veilux_chainId`, and
+  `veilux_nodeInfo`. Verified end-to-end: a transfer submitted to one validator
+  is BFT-finalized across all of them and applied to state (sender debited,
+  recipient credited).
+- **Configurable `chain_id` and `network` at genesis**, surfaced via
+  `veilux_chainId` / `veilux_nodeInfo`.
+
+### Changed
+- **Block validity now enforces a gas limit and timestamp rules.** A block is
+  rejected on commit unless its `timestamp` is `>= parent` and within 2 hours of
+  local time (`BadTimestamp`), and its total gas is `<= Limits::max_block_gas`
+  (default 30M) (`BlockGasExceeded`). Assembly stops including commands once the
+  gas limit would be exceeded. These bound block work and prevent arbitrary
+  proposer timestamps.
+
 ## [0.3.8] - 2026-06-05
 
 ### Security
@@ -278,7 +301,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.9...HEAD
+[0.3.9]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.5...v0.3.6
