@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an idea or new Prism for VEILUX
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve? Who benefits?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature. If it's a new Prism, note its commands, events, and state keys.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Kernel (Photon)
+        - Consensus (Aurora)
+        - Privacy (Veil)
+        - Networking / Store
+        - Prism (AI / Storage / Token / NFT / Contract)
+        - New Prism
+        - RPC / SDK
+        - Docs / tooling
+    validations:
+      required: true

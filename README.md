@@ -179,6 +179,13 @@ impl Prism for HelloPrism {
 Install it with `cascade.install(Box::new(HelloPrism))` and it's live. Full spec
 and checklist in `docs/add-ons.md`.
 
+## Contributing
+
+Contributions are welcome! Open PRs against the **`develop`** branch. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the branching model, commit conventions,
+and the checks CI runs. Adding a capability is as simple as writing a Prism —
+no kernel fork required (see [`docs/add-ons.md`](docs/add-ons.md)).
+
 ## License
 
 Licensed under either of:
