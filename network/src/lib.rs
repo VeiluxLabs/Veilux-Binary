@@ -1,6 +1,6 @@
 pub mod message;
 
-pub use message::NetMessage;
+pub use message::{NetMessage, ViewChange};
 
 use std::sync::Arc;
 

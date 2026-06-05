@@ -21,10 +21,10 @@ Status legend: ✅ implemented · 🔜 next.
 | **Persistence (store)** | ✅ | append-only block log + atomic state snapshots; chain reloads on restart |
 | **Network layer** | ✅ | lightweight TCP gossip transport for blocks, votes, and commands (no heavy libp2p) |
 | **`token` Prism** | ✅ | fungible LUX-style accounts, transfers, mint/burn |
-| **Multi-validator live finality** | ✅ | networked BFT: proposer broadcasts proposal, validators prevote→precommit, blocks finalize at 2/3+ across nodes (verified live with 3 validators) |
-| Proposer failover (round change) | 🔜 | leader rotation when the height proposer is offline |
-| State re-execution for non-proposers | 🔜 | non-proposers currently fast-accept the agreed block; full re-execution from block contents is next |
-| Block/view sync on join | 🔜 | `RequestBlocks` handler to catch a new node up to head |
+| **Multi-validator live finality** | ✅ | networked BFT: proposer broadcasts proposal, validators prevote→precommit, blocks finalize at 2/3+ across nodes (verified live with 3–4 validators) |
+| **State re-execution for non-proposers** | ✅ | blocks carry their commands; every node re-executes and verifies events_root + state_root, so all nodes converge on byte-identical authenticated state |
+| **Proposer failover (view change)** | ✅ | quorum-synchronized view changes: a stalled height advances proposer only when 2/3+ stake signs a view-change, so leaders can fail without halting the chain (verified by killing the proposer mid-run) |
+| **Block sync on join** | ✅ | `RequestBlocks`/`Blocks` gossip catches a lagging or restarted node up to the network head |
 
 ---
 

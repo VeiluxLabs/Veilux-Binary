@@ -126,9 +126,17 @@ received by the other over real TCP.
 ```
 
 Single-node persistent operation (`veilux run`) and **multi-node live BFT
-finality** (`veilux validator`) are both implemented today. State re-execution
-for non-proposers and proposer failover are the next steps — see
-`docs/roadmap.md` Tier 0.
+finality** (`veilux validator`) are both implemented today, including:
+
+- **State re-execution** — blocks carry their commands; every node re-executes
+  and verifies both `events_root` and `state_root`, so non-proposers reach
+  byte-identical state (no trust in the proposer's claimed output).
+- **Proposer failover** — quorum-synchronized view changes: a stalled height
+  only advances to the next proposer once 2/3+ of stake signs a view-change
+  vote, so a failed leader cannot halt the chain and honest nodes never desync
+  onto different proposers.
+- **Block sync** — a lagging or restarted node requests missing blocks
+  (`RequestBlocks`) and is caught up to the network head (`Blocks`).
 
 ---
 

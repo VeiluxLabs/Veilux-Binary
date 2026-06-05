@@ -1,6 +1,7 @@
 mod driver;
 mod node;
 mod validator_loop;
+mod viewsync;
 
 use anyhow::Result;
 use tracing::info;

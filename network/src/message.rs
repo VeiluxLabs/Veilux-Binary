@@ -11,6 +11,29 @@ pub enum NetMessage {
     Vote(Box<Vote>),
     Block(Box<Block>),
     RequestBlocks { from_height: u64 },
+    Blocks { blocks: Vec<Block> },
+    ViewChange(Box<ViewChange>),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ViewChange {
+    pub height: u64,
+    pub view: u32,
+    pub voter: veilux_kernel::PartyId,
+    pub public_key: Vec<u8>,
+    pub signature: Vec<u8>,
+}
+
+impl ViewChange {
+    pub fn signing_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::with_capacity(48);
+        v.extend_from_slice(b"veilux/view-change/v1");
+        v.push(0xff);
+        v.extend_from_slice(&self.height.to_le_bytes());
+        v.extend_from_slice(&self.view.to_le_bytes());
+        v.extend_from_slice(self.voter.0.as_bytes());
+        v
+    }
 }
 
 impl NetMessage {
@@ -30,6 +53,8 @@ impl NetMessage {
             NetMessage::Vote(_) => "vote",
             NetMessage::Block(_) => "block",
             NetMessage::RequestBlocks { .. } => "request_blocks",
+            NetMessage::Blocks { .. } => "blocks",
+            NetMessage::ViewChange(_) => "view_change",
         }
     }
 }

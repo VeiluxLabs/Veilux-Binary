@@ -131,6 +131,8 @@ pub struct Block {
     pub timestamp: u64,
     pub proposer: PartyId,
     pub events: Vec<Event>,
+    #[serde(default)]
+    pub commands: Vec<Command>,
 }
 
 impl Block {
@@ -142,6 +144,7 @@ impl Block {
                 self.parent.as_bytes(),
                 self.events_root.as_bytes(),
                 self.state_root.as_bytes(),
+                self.commands_root().as_bytes(),
                 &self.timestamp.to_le_bytes(),
                 self.proposer.0.as_bytes(),
             ],
@@ -150,6 +153,11 @@ impl Block {
 
     pub fn compute_events_root(&self) -> Hash {
         let leaves: Vec<Hash> = self.events.iter().map(|e| e.commitment()).collect();
+        crate::crypto::merkle_root(&leaves)
+    }
+
+    pub fn commands_root(&self) -> Hash {
+        let leaves: Vec<Hash> = self.commands.iter().map(|c| c.id()).collect();
         crate::crypto::merkle_root(&leaves)
     }
 
@@ -162,6 +170,7 @@ impl Block {
             timestamp,
             proposer,
             events: vec![],
+            commands: vec![],
         }
     }
 
@@ -174,6 +183,7 @@ impl Block {
             timestamp: 0,
             proposer: PartyId::new("genesis"),
             events: vec![],
+            commands: vec![],
         }
     }
 }

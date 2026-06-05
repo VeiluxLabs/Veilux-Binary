@@ -35,17 +35,6 @@ pub struct RoundMachine {
 }
 
 impl RoundMachine {
-    pub fn new(height: u64) -> Self {
-        RoundMachine {
-            height,
-            round: 0,
-            phase: Phase::Idle,
-            seen_blocks: HashMap::new(),
-            own_block: None,
-            my_votes: Vec::new(),
-        }
-    }
-
     pub fn new_round(height: u64, round: u32) -> Self {
         RoundMachine {
             height,
@@ -253,8 +242,10 @@ mod tests {
                 )
             })
             .collect();
-        let mut machines: Vec<RoundMachine> =
-            names.iter().map(|_| RoundMachine::new(height)).collect();
+        let mut machines: Vec<RoundMachine> = names
+            .iter()
+            .map(|_| RoundMachine::new_round(height, 0))
+            .collect();
 
         let mut prevotes = Vec::new();
         for (i, n) in names.iter().enumerate() {

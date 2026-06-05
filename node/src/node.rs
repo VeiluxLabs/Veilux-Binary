@@ -31,6 +31,10 @@ pub enum NodeError {
     MempoolFull,
     #[error("store error: {0}")]
     Store(String),
+    #[error("block parent/height does not extend the current head")]
+    BadParent,
+    #[error("{0} mismatch: block does not match re-executed result")]
+    RootMismatch(String),
 }
 
 pub struct Limits {
@@ -119,6 +123,17 @@ impl Node {
         self.blocks.last().expect("chain always has genesis")
     }
 
+    /// Blocks at height >= `from_height` (for serving sync requests). Capped to
+    /// avoid oversized responses.
+    pub fn blocks_from(&self, from_height: u64, max: usize) -> Vec<Block> {
+        self.blocks
+            .iter()
+            .filter(|b| b.height >= from_height && b.height > 0)
+            .take(max)
+            .cloned()
+            .collect()
+    }
+
     pub fn estimate(&self, command: &Command) -> Result<u64, NodeError> {
         Ok(self.cascade.estimate(command, &self.state)?)
     }
@@ -173,17 +188,19 @@ impl Node {
         self.commit_block(block)
     }
 
-    /// Assemble a block from the mempool: apply commands to state and return the
-    /// proposal block (not yet projected or persisted). Used by the proposer in
-    /// the multi-node consensus path before broadcasting.
+    /// Assemble a proposal block from the mempool. Applies commands to a
+    /// **clone** of the state to compute the events/state roots, without
+    /// mutating committed state. The returned block carries the commands so any
+    /// node can deterministically re-execute it in [`commit_block`].
     pub fn assemble_block(&mut self) -> Result<Block, NodeError> {
         let parent = self.head().clone();
         let take = self.mempool.len().min(self.limits.max_block_commands);
-        let commands: Vec<Command> = self.mempool.drain(..take).collect();
+        let commands: Vec<Command> = self.mempool.iter().take(take).cloned().collect();
 
+        let mut trial_state = self.state.clone();
         let mut all_events = Vec::new();
-        for cmd in commands {
-            let receipt = self.cascade.apply(cmd, &mut self.state)?;
+        for cmd in &commands {
+            let receipt = self.cascade.apply(cmd.clone(), &mut trial_state)?;
             all_events.extend(receipt.events);
         }
 
@@ -191,18 +208,48 @@ impl Node {
             height: parent.height + 1,
             parent: parent.hash(),
             events_root: Hash::ZERO,
-            state_root: self.state.root(),
+            state_root: trial_state.root(),
             timestamp: now(),
             proposer: self.proposer.clone(),
             events: all_events,
+            commands,
         };
         block.events_root = block.compute_events_root();
         Ok(block)
     }
 
-    /// Commit an assembled/agreed block: project into sub-ledgers, append to the
-    /// chain, and persist. Returns a summary.
-    pub fn commit_block(&mut self, block: Block) -> Result<BlockSummary, NodeError> {
+    /// Commit an agreed block. This is the single, deterministic execution path
+    /// run by **every** node (proposer and non-proposers alike):
+    ///
+    /// 1. Re-execute the block's commands against real state.
+    /// 2. Verify the recomputed events root and state root match the block's
+    ///    (rejecting any block whose proposer lied about the outcome).
+    /// 3. Project events into per-party sub-ledgers, append, and persist.
+    pub fn commit_block(&mut self, mut block: Block) -> Result<BlockSummary, NodeError> {
+        if block.parent != self.head().hash() || block.height != self.head().height + 1 {
+            return Err(NodeError::BadParent);
+        }
+
+        let mut new_state = self.state.clone();
+        let mut events = Vec::new();
+        for cmd in &block.commands {
+            let receipt = self.cascade.apply(cmd.clone(), &mut new_state)?;
+            events.extend(receipt.events);
+        }
+
+        let recomputed_events_root = {
+            let leaves: Vec<Hash> = events.iter().map(|e| e.commitment()).collect();
+            veilux_kernel::merkle_root_of(&leaves)
+        };
+        if recomputed_events_root != block.events_root {
+            return Err(NodeError::RootMismatch("events_root".into()));
+        }
+        if new_state.root() != block.state_root {
+            return Err(NodeError::RootMismatch("state_root".into()));
+        }
+
+        // Use the authoritative re-executed events for projection.
+        block.events = events;
         let projection = project_block(&block, &self.keyrings)?;
         let mut delivered = 0usize;
         for keyring in &self.keyrings {
@@ -213,6 +260,12 @@ impl Node {
                 }
             }
         }
+
+        // Adopt the new state and prune included commands from the mempool.
+        self.state = new_state;
+        let included: std::collections::HashSet<Hash> =
+            block.commands.iter().map(|c| c.id()).collect();
+        self.mempool.retain(|c| !included.contains(&c.id()));
 
         let summary = BlockSummary {
             height: block.height,
@@ -239,9 +292,9 @@ impl Node {
         Ok(summary)
     }
 
-    /// Accept a block finalized elsewhere (non-proposer fast-path). Appends and
-    /// persists if it extends our head. State re-execution for non-proposers is
-    /// a documented follow-up; this keeps the chain head consistent.
+    /// Accept a block finalized elsewhere. Now identical to [`commit_block`] —
+    /// non-proposers fully re-execute and verify, so all nodes converge on the
+    /// same authenticated state (no more fast-accept divergence).
     pub fn accept_external_block(&mut self, block: Block) -> Result<bool, NodeError> {
         if block.parent != self.head().hash() || block.height != self.head().height + 1 {
             return Ok(false);
@@ -249,13 +302,7 @@ impl Node {
         if self.blocks.iter().any(|b| b.hash() == block.hash()) {
             return Ok(false);
         }
-        self.blocks.push(block);
-        if let Some(store) = &self.store {
-            let last = self.blocks.last().expect("just pushed");
-            store
-                .append_block(last)
-                .map_err(|e| NodeError::Store(e.to_string()))?;
-        }
+        self.commit_block(block)?;
         Ok(true)
     }
 
