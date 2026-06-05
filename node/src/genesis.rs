@@ -18,6 +18,18 @@ pub struct ChainSpec {
     /// Initial balances: (party, whole-token amount). The total supply is the
     /// sum of these, scaled by `token_decimals`.
     pub allocations: Vec<GenesisAlloc>,
+    /// Transaction fee price per unit of gas (in base units of the native
+    /// token). 0 disables fees (default).
+    #[serde(default)]
+    pub fee_price_per_gas: u128,
+    /// Fraction of each fee that is burned, in basis points (rest rewards the
+    /// block proposer). Default 5000 = 50%.
+    #[serde(default = "default_burn_bps")]
+    pub fee_burn_bps: u16,
+}
+
+fn default_burn_bps() -> u16 {
+    5_000
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -38,6 +50,8 @@ impl Default for ChainSpec {
                 party: "treasury".to_string(),
                 amount: 1_000_000_000,
             }],
+            fee_price_per_gas: 0,
+            fee_burn_bps: default_burn_bps(),
         }
     }
 }
@@ -50,6 +64,14 @@ impl ChainSpec {
 
     pub fn total_supply_whole(&self) -> u128 {
         self.allocations.iter().map(|a| a.amount as u128).sum()
+    }
+
+    /// The fee policy this spec configures.
+    pub fn fee_policy(&self) -> crate::node::FeePolicy {
+        crate::node::FeePolicy {
+            price_per_gas: self.fee_price_per_gas,
+            burn_bps: self.fee_burn_bps,
+        }
     }
 
     /// Seed the native token into a fresh chain's state. Deterministic and

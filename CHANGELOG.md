@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-06-05
+
+### Added
+- **Transaction fees / gas market (node-level).** When a chain sets
+  `fee_price_per_gas > 0` at genesis, every command is charged
+  `fee = gas_used × price` in the native token during block execution. The fee is
+  split by `fee_burn_bps`: a configurable fraction is **burned** (deflationary)
+  and the rest is paid to the **block proposer** as a reward. The charge is
+  computed deterministically by every node during re-execution and capped at the
+  payer's balance, so it never causes disagreement. Disabled by default. Verified
+  live: a transfer charged the submitter, credited the proposer half the fee, and
+  reduced total supply by the burned half.
+- **Validator slashing for equivocation.** The Staking Prism gained a `slash`
+  command: anyone may submit two messages a validator signed for the same
+  consensus slot; the prism verifies both signatures against the offender's key
+  and that they differ — unforgeable proof of double-signing — then **burns** 20%
+  of the offender's self-bonded stake and records the offence so it cannot be
+  replayed. Forged or self-consistent evidence is rejected.
+- **Native-token fee helpers** in the Token Prism (`collect_fee`, `burn_from`)
+  with value-conserving burn/reward accounting, reused by the node fee engine and
+  staking slashing.
+
 ## [0.3.4] - 2026-06-05
 
 ### Added
@@ -202,7 +224,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.1...v0.3.2

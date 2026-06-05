@@ -563,6 +563,81 @@ pub fn move_balance(
     )
 }
 
+/// Burn `amount` of `token_id` from `who`, reducing both their balance and the
+/// token's total supply. Used by the fee burn and by deflationary mechanisms.
+pub fn burn_from(
+    state: &mut StateTree,
+    token_id: &Hash,
+    who: &PartyId,
+    amount: u128,
+) -> Result<(), PrismError> {
+    debit(state, token_id, who, amount)?;
+    if let Some(mut meta) = token_meta(state, token_id) {
+        meta.total_supply = meta.total_supply.saturating_sub(amount);
+        state
+            .put_json(TokenPrism::meta_key(token_id), &meta)
+            .map_err(|e| PrismError::Internal(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Outcome of charging a transaction fee.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FeeOutcome {
+    pub charged: u128,
+    pub burned: u128,
+    pub rewarded: u128,
+}
+
+/// Charge a transaction fee from `payer` for `token_id`: a `burn_bps` fraction
+/// is burned (supply down) and the remainder is paid to `proposer` as a block
+/// reward. The charge is capped at the payer's balance (so re-execution never
+/// fails on an underfunded account — deterministic for every node). Value is
+/// conserved: `charged = burned + rewarded`.
+pub fn collect_fee(
+    state: &mut StateTree,
+    token_id: &Hash,
+    payer: &PartyId,
+    proposer: &PartyId,
+    fee: u128,
+    burn_bps: u16,
+) -> Result<FeeOutcome, PrismError> {
+    let bal = TokenPrism::balance(state, token_id, payer);
+    let charged = fee.min(bal);
+    if charged == 0 {
+        return Ok(FeeOutcome::default());
+    }
+    let burned = charged * (burn_bps.min(10_000) as u128) / 10_000;
+    let rewarded = charged - burned;
+    // Remove the full charge from the payer.
+    TokenPrism::set_balance(state, token_id, payer, bal - charged)?;
+    // Pay the proposer the reward (pure transfer, supply unchanged).
+    if rewarded > 0 {
+        let pbal = TokenPrism::balance(state, token_id, proposer);
+        TokenPrism::set_balance(
+            state,
+            token_id,
+            proposer,
+            pbal.checked_add(rewarded)
+                .ok_or_else(|| PrismError::Internal("reward overflow".into()))?,
+        )?;
+    }
+    // Burn the rest (supply down).
+    if burned > 0 {
+        if let Some(mut meta) = token_meta(state, token_id) {
+            meta.total_supply = meta.total_supply.saturating_sub(burned);
+            state
+                .put_json(TokenPrism::meta_key(token_id), &meta)
+                .map_err(|e| PrismError::Internal(e.to_string()))?;
+        }
+    }
+    Ok(FeeOutcome {
+        charged,
+        burned,
+        rewarded,
+    })
+}
+
 /// Seed the native token's metadata and initial allocations at genesis. Safe to
 /// call once on an empty chain; does nothing if the native token already exists.
 pub fn seed_native_token(
@@ -718,5 +793,91 @@ mod tests {
         p.handle(&tf, &mut s).unwrap();
         assert_eq!(balance_of(&s, &id, &PartyId::new("dave")), 200);
         assert_eq!(balance_of(&s, &id, &PartyId::new("alice")), 800);
+    }
+
+    #[test]
+    fn native_token_seed_and_balances() {
+        let mut s = StateTree::new();
+        let id = seed_native_token(
+            &mut s,
+            "Veilux",
+            "LUX",
+            18,
+            &PartyId::new("treasury"),
+            &[
+                (PartyId::new("treasury"), 700),
+                (PartyId::new("alice"), 300),
+            ],
+        )
+        .unwrap();
+        assert_eq!(id, native_token_id());
+        assert_eq!(token_meta(&s, &id).unwrap().total_supply, 1000);
+        assert_eq!(balance_of(&s, &id, &PartyId::new("alice")), 300);
+        // idempotent: a second seed is a no-op
+        seed_native_token(&mut s, "X", "X", 0, &PartyId::new("t"), &[]).unwrap();
+        assert_eq!(token_meta(&s, &id).unwrap().total_supply, 1000);
+    }
+
+    #[test]
+    fn fee_splits_burn_and_reward_conserving_value() {
+        let mut s = StateTree::new();
+        let id = seed_native_token(
+            &mut s,
+            "Veilux",
+            "LUX",
+            0,
+            &PartyId::new("treasury"),
+            &[(PartyId::new("alice"), 10_000)],
+        )
+        .unwrap();
+        let supply_before = token_meta(&s, &id).unwrap().total_supply;
+
+        // 1000 fee, 30% burn -> 300 burned, 700 to proposer
+        let out = collect_fee(
+            &mut s,
+            &id,
+            &PartyId::new("alice"),
+            &PartyId::new("v1"),
+            1_000,
+            3_000,
+        )
+        .unwrap();
+        assert_eq!(out.charged, 1_000);
+        assert_eq!(out.burned, 300);
+        assert_eq!(out.rewarded, 700);
+        assert_eq!(balance_of(&s, &id, &PartyId::new("alice")), 9_000);
+        assert_eq!(balance_of(&s, &id, &PartyId::new("v1")), 700);
+        // supply dropped by exactly the burned amount
+        assert_eq!(
+            token_meta(&s, &id).unwrap().total_supply,
+            supply_before - 300
+        );
+    }
+
+    #[test]
+    fn fee_is_capped_at_payer_balance() {
+        let mut s = StateTree::new();
+        let id = seed_native_token(
+            &mut s,
+            "Veilux",
+            "LUX",
+            0,
+            &PartyId::new("treasury"),
+            &[(PartyId::new("poor"), 50)],
+        )
+        .unwrap();
+        // fee exceeds balance: charge only what's available, never error
+        let out = collect_fee(
+            &mut s,
+            &id,
+            &PartyId::new("poor"),
+            &PartyId::new("v1"),
+            1_000,
+            0,
+        )
+        .unwrap();
+        assert_eq!(out.charged, 50);
+        assert_eq!(balance_of(&s, &id, &PartyId::new("poor")), 0);
+        assert_eq!(balance_of(&s, &id, &PartyId::new("v1")), 50);
     }
 }

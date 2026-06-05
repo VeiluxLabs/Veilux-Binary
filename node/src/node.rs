@@ -53,6 +53,31 @@ impl Default for Limits {
     }
 }
 
+/// Deterministic fee policy applied during block execution. The fee for a
+/// command is `gas_used * price_per_gas`; a `burn_bps` fraction is burned and
+/// the rest is paid to the block proposer. Disabled by default (`price_per_gas
+/// = 0`) so existing flows are unchanged until a chain opts in at genesis.
+#[derive(Clone, Copy, Debug)]
+pub struct FeePolicy {
+    pub price_per_gas: u128,
+    pub burn_bps: u16,
+}
+
+impl Default for FeePolicy {
+    fn default() -> Self {
+        FeePolicy {
+            price_per_gas: 0,
+            burn_bps: 5_000,
+        }
+    }
+}
+
+impl FeePolicy {
+    pub fn enabled(&self) -> bool {
+        self.price_per_gas > 0
+    }
+}
+
 pub struct Node {
     pub cascade: Cascade,
     pub state: StateTree,
@@ -64,6 +89,7 @@ pub struct Node {
     pub accounts: HashMap<PartyId, Vec<u8>>,
     pub nonces: HashMap<PartyId, u64>,
     pub limits: Limits,
+    pub fee_policy: FeePolicy,
     pub store: Option<Store>,
 }
 
@@ -81,6 +107,7 @@ impl Node {
             accounts: HashMap::new(),
             nonces: HashMap::new(),
             limits: Limits::default(),
+            fee_policy: FeePolicy::default(),
             store: None,
         }
     }
@@ -142,6 +169,35 @@ impl Node {
                 .map_err(|e| NodeError::Store(e.to_string()))?;
         }
         Ok(true)
+    }
+
+    /// Charge the deterministic transaction fee for one command. No-op unless a
+    /// price is configured. The payer is the command submitter; the reward goes
+    /// to the block proposer and a fraction is burned. Charge is capped at the
+    /// payer's native balance, so it never fails re-execution. Returns silently
+    /// because the fee is best-effort revenue, not a validity condition.
+    fn charge_fee(
+        policy: FeePolicy,
+        state: &mut StateTree,
+        payer: &PartyId,
+        proposer: &PartyId,
+        gas_used: u64,
+    ) {
+        if !policy.enabled() {
+            return;
+        }
+        let fee = policy.price_per_gas.saturating_mul(gas_used as u128);
+        if fee == 0 {
+            return;
+        }
+        let _ = prism_token::collect_fee(
+            state,
+            &prism_token::native_token_id(),
+            payer,
+            proposer,
+            fee,
+            policy.burn_bps,
+        );
     }
 
     pub fn head(&self) -> &Block {
@@ -224,8 +280,16 @@ impl Node {
 
         let mut trial_state = self.state.clone();
         let mut all_events = Vec::new();
+        let proposer = self.proposer.clone();
         for cmd in &commands {
             let receipt = self.cascade.apply(cmd.clone(), &mut trial_state)?;
+            Self::charge_fee(
+                self.fee_policy,
+                &mut trial_state,
+                &cmd.submitter,
+                &proposer,
+                receipt.total_cost,
+            );
             all_events.extend(receipt.events);
         }
 
@@ -257,8 +321,16 @@ impl Node {
 
         let mut new_state = self.state.clone();
         let mut events = Vec::new();
+        let block_proposer = block.proposer.clone();
         for cmd in &block.commands {
             let receipt = self.cascade.apply(cmd.clone(), &mut new_state)?;
+            Self::charge_fee(
+                self.fee_policy,
+                &mut new_state,
+                &cmd.submitter,
+                &block_proposer,
+                receipt.total_cost,
+            );
             events.extend(receipt.events);
         }
 

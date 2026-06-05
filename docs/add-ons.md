@@ -341,6 +341,7 @@ unspendable until unstaked.
 | `staking/delegation/<delegator>/<validator>` | delegated amount (decimal string) |
 | `gov/proposal/<id>` | JSON `Proposal` (status, yes/no power, deadline) |
 | `gov/vote/<id>/<voter>` | the voter's choice (anti double-vote) |
+| `staking/slashed/<offence_id>` | marker so an equivocation offence can't be re-slashed |
 
 ### Commands (`StakingCommand`)
 
@@ -352,6 +353,9 @@ unspendable until unstaked.
 { "op": "propose",     "title": "raise block size", "description": "...", "voting_period": 100 }
 { "op": "vote",        "proposal_id": "0x...", "approve": true }
 { "op": "finalize",    "proposal_id": "0x..." }
+{ "op": "slash",       "proof": { "offender": "bob", "public_key": "<hex>",
+                                  "message_a": "<hex>", "signature_a": "<hex>",
+                                  "message_b": "<hex>", "signature_b": "<hex>" } }
 ```
 
 ### Rules & gas
@@ -360,10 +364,17 @@ unspendable until unstaked.
 - Voting power = `self_bonded + delegated_in`; votes are weighted by it.
 - Only bonded stakers may open proposals; each party votes once per proposal;
   proposals finalize as `passed`/`rejected` after the voting period.
+- **Slashing:** anyone may submit `slash` with two messages the offender signed
+  for the same consensus slot. The prism verifies *both* signatures against the
+  offender's key and that the messages differ — unforgeable proof of
+  double-signing. On success, `DEFAULT_SLASH_BPS` (20%) of the offender's
+  self-bonded stake is **burned** from the escrow (supply down) and the offence
+  is recorded so it cannot be replayed. Forged or self-consistent evidence is
+  rejected with no effect.
 - Block height is appended to the command payload by the node so the prism has a
   deterministic notion of "now" without reading a clock.
 - Gas: stake/unstake 3,000 · delegate/undelegate 3,500 · propose 5,000 · vote
-  2,000 · finalize 2,500.
+  2,000 · finalize 2,500 · slash 7,000.
 
 ---
 
@@ -447,6 +458,50 @@ Validators that execute a confidential `transfer` do see the openings in the
 command they process; making amounts blind to validators too is the
 **ZK Coprocessor Prism** roadmap item (prove conservation in zero-knowledge).
 Gas: create 5,000 · mint 4,000 · transfer 8,000.
+
+---
+
+## Native token, fees & genesis (node-level)
+
+These are **chain-level economics**, configured at genesis rather than by a
+single Prism — but they build on the Token Prism's native-token helpers.
+
+### Configurable native token
+A new chain chooses its token identity in a genesis spec (`--genesis spec.json`):
+
+```jsonc
+{
+  "token_name": "Veilux",
+  "token_symbol": "LUX",
+  "token_decimals": 18,
+  "treasury": "treasury",
+  "allocations": [
+    { "party": "treasury",   "amount": 700000000 },
+    { "party": "validators", "amount": 200000000 },
+    { "party": "ecosystem",  "amount": 100000000 }
+  ],
+  "fee_price_per_gas": 1,
+  "fee_burn_bps": 5000
+}
+```
+
+`name`, `symbol`, `decimals`, and the initial **total supply** (sum of
+allocations × 10^decimals) are all chosen here. Seeding is deterministic and
+idempotent — every validator sharing the spec converges on byte-identical state.
+
+### Transaction fees (gas market)
+When `fee_price_per_gas > 0`, every command is charged a fee during block
+execution: `fee = gas_used × fee_price_per_gas`, paid in the native token by the
+command's submitter. The fee is split by `fee_burn_bps`:
+
+- a configurable fraction is **burned** (total supply decreases — deflationary), and
+- the remainder is paid to the **block proposer** as a reward (validator income).
+
+The charge is computed deterministically by every node during re-execution and
+is capped at the payer's balance, so it can never cause nodes to disagree. Fees
+are disabled (`fee_price_per_gas = 0`) by default, so existing dev flows are
+unchanged until a chain opts in. This is the anti-spam + validator-incentive
+backbone that pairs with the Staking Prism.
 
 ---
 

@@ -39,7 +39,8 @@ execution, data availability, and settlement are distinct layers
 | Prism | Capability | Notes |
 |-------|------------|-------|
 | **Account Abstraction Prism** | programmable accounts, gasless/sponsored tx, session keys, social recovery | Mirrors EIP-4337 / EIP-7702 direction; UX comparable to web2 ([OKX, 2025](https://www.okx.com/en-us/learn/eip-sdk-implementation)) |
-| **Staking & Governance Prism** ✅ | bond native LUX, delegate, stake-weighted on-chain proposals & voting | Shipped: escrowed stake, delegation, proposal lifecycle (`prisms/staking`). Next: slashing wired to consensus equivocation + reward distribution |
+| **Staking & Governance Prism** ✅ | bond native LUX, delegate, stake-weighted on-chain proposals & voting, **slashing** | Shipped: escrowed stake, delegation, proposal lifecycle, equivocation slashing burns 20% of self-stake on signed double-sign evidence (`prisms/staking`). Next: auto-route consensus equivocation into slash evidence + reward accrual |
+| **Fee market / gas economics** ✅ | per-command fees charged at execution, split burn + proposer reward | Shipped: deterministic `fee = gas × price`, configurable burn fraction, capped at payer balance, configured at genesis (node-level). Next: dynamic base-fee (EIP-1559 style) |
 | **Oracle Prism** ✅ | quorum-attested external data feeds (prices, AI outputs, facts) | Shipped: reporter set + signature quorum + round anti-replay (`prisms/oracle`) |
 | **Data Availability Prism** | erasure-coded blobs + DA sampling so light nodes verify availability without full download | A dedicated DA layer keeps nodes light ([OurCryptoTalk, 2025](https://ourcryptotalk.com/learn/da-layer-in-crypto-data-availability)) |
 | **ZK Coprocessor Prism** | offload heavy compute, verify a succinct proof on-chain | "Trust the math" path; complements Veil's message-based privacy |

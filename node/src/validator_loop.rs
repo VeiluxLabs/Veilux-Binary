@@ -114,6 +114,7 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
                     .map_err(|e| crate::node::NodeError::Store(e.to_string()))
             })
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        node.fee_policy = spec.fee_policy();
         if seeded {
             info!(
                 token = %spec.token_symbol,

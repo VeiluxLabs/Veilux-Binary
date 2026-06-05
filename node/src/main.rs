@@ -119,6 +119,7 @@ fn cmd_serve(args: &[String]) -> Result<()> {
                 .map_err(|e| node::NodeError::Store(e.to_string()))
         })
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    node.fee_policy = spec.fee_policy();
 
     println!("VEILUX dev RPC node");
     println!("  rpc      : http://{addr}");
@@ -133,6 +134,18 @@ fn cmd_serve(args: &[String]) -> Result<()> {
             "seeded now"
         } else {
             "already present"
+        }
+    );
+    println!(
+        "  fees     : {}",
+        if spec.fee_price_per_gas > 0 {
+            format!(
+                "{}/gas, {}% burned",
+                spec.fee_price_per_gas,
+                spec.fee_burn_bps / 100
+            )
+        } else {
+            "disabled".to_string()
         }
     );
     println!("  height   : #{}", node.head().height);

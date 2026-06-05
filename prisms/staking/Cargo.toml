@@ -8,6 +8,8 @@ description = "VEILUX staking & governance Prism — stake native LUX, delegate,
 
 [dependencies]
 veilux-kernel.workspace = true
+veilux-veil.workspace = true
 prism-token.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+hex.workspace = true
