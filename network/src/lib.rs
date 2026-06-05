@@ -156,15 +156,17 @@ impl Network {
         let mut reader = BufReader::new(read_half);
         let mut write_half = write_half;
 
+        let mut session = None;
         if let Some(auth) = &self.cfg.auth {
             match auth::perform_handshake(auth, &mut reader, &mut write_half).await {
-                Ok(peer) => {
+                Ok((peer, sess)) => {
                     info!(
                         party = %peer.party,
                         addr = ?peer_addr,
                         dir = if inbound { "inbound" } else { "outbound" },
-                        "peer authenticated"
+                        "peer authenticated (encrypted channel established)"
                     );
+                    session = Some(sess);
                 }
                 Err(e) => {
                     warn!(addr = ?peer_addr, error = %e, "handshake failed, dropping peer");
@@ -181,9 +183,25 @@ impl Network {
         let inbound_tx = self.inbound_tx.clone();
         let peer_count = Arc::clone(&self.peer_count);
 
+        let (sender, receiver) = match session {
+            Some(s) => {
+                let (tx, rx) = s.split();
+                (Some(tx), Some(rx))
+            }
+            None => (None, None),
+        };
+
         let writer = tokio::spawn(async move {
+            let mut sender = sender;
             while let Ok(line) = rx.recv().await {
-                if write_half.write_all(line.as_bytes()).await.is_err() {
+                let payload = match &mut sender {
+                    Some(tx) => match tx.seal(line.as_bytes()) {
+                        Ok(ct) => hex::encode(ct),
+                        Err(_) => break,
+                    },
+                    None => line,
+                };
+                if write_half.write_all(payload.as_bytes()).await.is_err() {
                     break;
                 }
                 if write_half.write_all(b"\n").await.is_err() {
@@ -192,12 +210,35 @@ impl Network {
             }
         });
 
+        let mut receiver = receiver;
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if line.trim().is_empty() {
                 continue;
             }
-            match NetMessage::decode(&line) {
+            let plaintext = match &mut receiver {
+                Some(rx) => {
+                    let Ok(ct) = hex::decode(line.trim()) else {
+                        debug!("dropping malformed encrypted frame");
+                        continue;
+                    };
+                    match rx.open(&ct) {
+                        Ok(pt) => match String::from_utf8(pt) {
+                            Ok(s) => s,
+                            Err(_) => {
+                                warn!("decrypted frame is not valid utf-8, dropping peer");
+                                break;
+                            }
+                        },
+                        Err(_) => {
+                            warn!("frame decryption failed (tamper/replay), dropping peer");
+                            break;
+                        }
+                    }
+                }
+                None => line,
+            };
+            match NetMessage::decode(&plaintext) {
                 Ok(msg) => {
                     let _ = inbound_tx.send(msg);
                 }

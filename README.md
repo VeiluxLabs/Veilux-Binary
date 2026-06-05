@@ -15,7 +15,7 @@ Repository: **[github.com/VeiluxLabs/Veilux-Binary](https://github.com/VeiluxLab
 
 VEILUX is built around three ideas:
 
-1. **A featherweight core.** The *Photon* kernel knows almost nothing. It defines the data shapes, one extension trait (`Prism`), a pipeline (`Cascade`), and a content-addressed state. That's it. Everything heavy is an add-on you compile in only if you need it. Release binaries are optimized for size (`opt-level = "z"`, LTO, stripped).
+1. **A featherweight core.** The *Photon* kernel knows almost nothing. It defines the data shapes, one extension trait (`Prism`), a pipeline (`Cascade`), and a content-addressed state. That's it. Everything heavy is an add-on you compile in only if you need it. Release binaries are built for speed (`opt-level = 3`, LTO, stripped) yet still tiny (~2.9 MB).
 
 2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Nine ship today: **Token**, **NFT**, **Contract** (PhotonVM), **AI** (+ optional Ollama), **Storage**, **Bridge** (cross-chain), **Staking & Governance**, **Oracle**, and **Confidential Token**. They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait — no kernel fork.
 
@@ -57,8 +57,8 @@ default.**
   interpreter, no VM runtime). Memory-safe with no garbage collector, and
   deterministic — every node computes identical results, which is what BFT
   consensus requires.
-- **Featherweight.** Release binaries are size-optimized (`opt-level="z"`, LTO,
-  stripped, `panic="abort"`) and typically only ~0.6–0.9 MB per platform. The
+- **Featherweight.** Release binaries are built for speed (`opt-level=3`, LTO,
+  stripped, `panic="abort"`) and are still only ~2.9 MB per platform. The
   core kernel depends on just four small crates — no heavyweight database or
   networking framework.
 - **Multi-platform.** One codebase ships to six targets: Linux (glibc + static
@@ -74,8 +74,8 @@ default.**
 | **Aurora** (consensus) | Stake-weighted Byzantine fault-tolerant consensus: 2/3+ finality, deterministic proposer selection, quorum-synchronized proposer failover, and equivocation detection that auto-submits slashing evidence. |
 | **Veil** (privacy) | One logically shared ledger; each event is sealed per-party with ChaCha20-Poly1305, while all nodes agree on a Merkle root of blinded commitments. Includes scoped selective disclosure for auditors/regulators. |
 | **Economics** | Configurable native token at genesis, gas-priced transaction fees split between a burn and a proposer reward, staking with delegation, and on-chain stake-weighted governance. |
-| **Store** | Persistent block log + atomic state snapshots; the chain reloads on restart. |
-| **Network** | Lightweight TCP gossip for proposals, votes, blocks, and sync — with an optional authenticated handshake (signed peer identity + IP allowlist). |
+| **Store** | Persistent block log + atomic state snapshots + a persistent mempool (pending transactions survive restarts); the chain reloads on restart. |
+| **Network** | Lightweight TCP gossip for proposals, votes, blocks, and sync — with an optional authenticated, **end-to-end encrypted** transport (signed peer identity + X25519/ChaCha20-Poly1305 + IP allowlist). |
 
 ### Features
 
@@ -119,12 +119,16 @@ default.**
    security, smaller binaries, and long-term maintainability.
 4. **Real economics & security.** Stake-weighted BFT with delegation,
    governance, gas-priced fees (burn + proposer reward), automatic slashing of
-   equivocating validators, and an authenticated peer transport.
+   equivocating validators, and an authenticated, end-to-end encrypted peer
+   transport.
 5. **Cross-chain by design.** The Bridge Prism connects VEILUX to other
    ecosystems out of the box.
-6. **EVM-reachable.** An optional `eth_*` JSON-RPC shim lets MetaMask, ethers.js,
-   and other Ethereum tooling connect to a VEILUX node and send real
-   secp256k1/EIP-155 signed value transfers (see `docs/evm-compat.md`).
+6. **EVM-compatible — runs Solidity.** An optional `eth_*` JSON-RPC shim lets
+   MetaMask, ethers.js, and other Ethereum tooling connect to a VEILUX node,
+   send real secp256k1/EIP-155 signed transactions, and **deploy and call EVM
+   contract bytecode** — the `veilux-evm` crate includes a from-scratch EVM
+   interpreter (deploy, call, `eth_call`, receipts, `eth_getCode`). See
+   `docs/evm-compat.md`.
 
 ### Who it's for
 
@@ -136,13 +140,14 @@ default.**
 ### Status
 
 VEILUX is a fully functional chain: live multi-node BFT consensus with proposer
-failover and auto-slashing, persistence, an authenticated gossip network,
-privacy, nine Prisms, configurable token economics with fees and staking, and
-JSON-RPC + WebSocket APIs with Rust and TypeScript SDKs — all covered by tests
-and continuous integration. It has not yet run a public mainnet; treat it as a
-testnet-grade core. See `docs/security.md` for the honest threat model and
-remaining hardening items (transport encryption, ZK-blind confidential transfers,
-HSM key management).
+failover and auto-slashing, persistence (with a restart-safe mempool), an
+authenticated **and encrypted** gossip network, privacy, nine Prisms, configurable
+token economics with fees and staking, a from-scratch EVM execution layer
+(deploy + call Solidity bytecode over `eth_*`), and JSON-RPC + WebSocket APIs with
+Rust and TypeScript SDKs — all covered by tests and continuous integration. It has
+not yet run a public mainnet; treat it as a testnet-grade core. See
+`docs/security.md` for the honest threat model and remaining hardening items
+(ZK-blind confidential transfers, HSM key management, inter-contract EVM calls).
 
 ## Workspace layout
 
@@ -177,8 +182,8 @@ veilux/
 │   ├── staking/       # Staking & Governance Prism: stake, delegate, vote, slash
 │   ├── oracle/        # Oracle Prism: quorum-attested external data feeds
 │   └── confidential/  # Confidential Token Prism: hidden balances + disclosure
-├── evm/               # EVM compat: keccak/secp256k1 recovery, RLP, eth_* tx decode
-└── node/              # assembles kernel + veil + consensus + store + prisms
+├── evm/               # EVM: 256-bit math, interpreter, keccak/secp256k1, RLP, eth_* tx
+└── node/              # assembles kernel + veil + consensus + store + prisms + evm
                        #   (genesis token config, fee engine, auto-slash watcher)
 ```
 

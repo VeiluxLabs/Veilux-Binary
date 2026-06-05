@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "VEILUX EVM compatibility — Ethereum address/secp256k1 recovery, RLP, and raw-tx decoding for eth_* JSON-RPC"
+description = "VEILUX EVM — from-scratch 256-bit interpreter, secp256k1 recovery, RLP, and raw-tx decoding for eth_* JSON-RPC and Solidity bytecode execution"
 
 [dependencies]
 thiserror.workspace = true

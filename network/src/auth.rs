@@ -1,12 +1,19 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    ChaCha20Poly1305, Nonce,
+};
+use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use veilux_veil::{verify_bytes, PartyIdentity};
+use x25519_dalek::{EphemeralSecret, PublicKey as XPublicKey};
 
 const HANDSHAKE_DOMAIN: &[u8] = b"veilux/net-handshake/v1";
+const SESSION_KDF_DOMAIN: &[u8] = b"veilux/net-session/v1";
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
@@ -26,6 +33,10 @@ pub enum AuthError {
     KeyMismatch(String),
     #[error("peer proof signature is invalid")]
     BadProof,
+    #[error("malformed ephemeral key")]
+    BadEphemeralKey,
+    #[error("frame decryption failed (tampered or out-of-order ciphertext)")]
+    Decryption,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +72,101 @@ pub struct PeerInfo {
     pub public_key: Vec<u8>,
 }
 
+pub struct Session {
+    send_cipher: ChaCha20Poly1305,
+    recv_cipher: ChaCha20Poly1305,
+    send_counter: u64,
+    recv_counter: u64,
+}
+
+impl Session {
+    fn new(send_key: [u8; 32], recv_key: [u8; 32]) -> Self {
+        Session {
+            send_cipher: ChaCha20Poly1305::new_from_slice(&send_key).expect("32-byte key"),
+            recv_cipher: ChaCha20Poly1305::new_from_slice(&recv_key).expect("32-byte key"),
+            send_counter: 0,
+            recv_counter: 0,
+        }
+    }
+
+    pub fn seal(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, AuthError> {
+        let nonce = counter_nonce(self.send_counter);
+        self.send_counter = self.send_counter.wrapping_add(1);
+        self.send_cipher
+            .encrypt(Nonce::from_slice(&nonce), plaintext)
+            .map_err(|_| AuthError::Decryption)
+    }
+
+    pub fn open(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, AuthError> {
+        let nonce = counter_nonce(self.recv_counter);
+        self.recv_counter = self.recv_counter.wrapping_add(1);
+        self.recv_cipher
+            .decrypt(Nonce::from_slice(&nonce), ciphertext)
+            .map_err(|_| AuthError::Decryption)
+    }
+
+    pub fn split(self) -> (Sender, Receiver) {
+        (
+            Sender {
+                cipher: self.send_cipher,
+                counter: self.send_counter,
+            },
+            Receiver {
+                cipher: self.recv_cipher,
+                counter: self.recv_counter,
+            },
+        )
+    }
+}
+
+pub struct Sender {
+    cipher: ChaCha20Poly1305,
+    counter: u64,
+}
+
+impl Sender {
+    pub fn seal(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, AuthError> {
+        let nonce = counter_nonce(self.counter);
+        self.counter = self.counter.wrapping_add(1);
+        self.cipher
+            .encrypt(Nonce::from_slice(&nonce), plaintext)
+            .map_err(|_| AuthError::Decryption)
+    }
+}
+
+pub struct Receiver {
+    cipher: ChaCha20Poly1305,
+    counter: u64,
+}
+
+impl Receiver {
+    pub fn open(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, AuthError> {
+        let nonce = counter_nonce(self.counter);
+        self.counter = self.counter.wrapping_add(1);
+        self.cipher
+            .decrypt(Nonce::from_slice(&nonce), ciphertext)
+            .map_err(|_| AuthError::Decryption)
+    }
+}
+
+fn counter_nonce(counter: u64) -> [u8; 12] {
+    let mut nonce = [0u8; 12];
+    nonce[4..].copy_from_slice(&counter.to_be_bytes());
+    nonce
+}
+
+fn derive_session_keys(shared: &[u8; 32], initiator_eph: &[u8], responder_eph: &[u8]) -> [u8; 64] {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(SESSION_KDF_DOMAIN);
+    hasher.update(shared);
+    hasher.update(initiator_eph);
+    hasher.update(responder_eph);
+    let mut out = [0u8; 64];
+    let mut reader = hasher.finalize_xof();
+    reader.fill(&mut out);
+    out
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "a", content = "d")]
 enum AuthMsg {
@@ -68,19 +174,22 @@ enum AuthMsg {
         party: String,
         public_key: Vec<u8>,
         nonce: Vec<u8>,
+        ephemeral: Vec<u8>,
     },
     Proof {
         signature: Vec<u8>,
     },
 }
 
-fn proof_message(challenger_nonce: &[u8], signer_party: &str) -> Vec<u8> {
-    let mut m = Vec::with_capacity(HANDSHAKE_DOMAIN.len() + challenger_nonce.len() + 32);
+fn proof_message(challenger_nonce: &[u8], signer_party: &str, signer_ephemeral: &[u8]) -> Vec<u8> {
+    let mut m = Vec::with_capacity(HANDSHAKE_DOMAIN.len() + challenger_nonce.len() + 64);
     m.extend_from_slice(HANDSHAKE_DOMAIN);
     m.push(0xff);
     m.extend_from_slice(challenger_nonce);
     m.push(0xff);
     m.extend_from_slice(signer_party.as_bytes());
+    m.push(0xff);
+    m.extend_from_slice(signer_ephemeral);
     m
 }
 
@@ -104,7 +213,7 @@ pub async fn perform_handshake<R, W>(
     cfg: &AuthConfig,
     reader: &mut R,
     writer: &mut W,
-) -> Result<PeerInfo, AuthError>
+) -> Result<(PeerInfo, Session), AuthError>
 where
     R: AsyncBufReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
@@ -113,22 +222,28 @@ where
     let mut my_nonce = vec![0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut my_nonce);
 
+    let my_eph_secret = EphemeralSecret::random_from_rng(OsRng);
+    let my_eph_public = XPublicKey::from(&my_eph_secret);
+    let my_eph_bytes = my_eph_public.as_bytes().to_vec();
+
     write_msg(
         writer,
         &AuthMsg::Hello {
             party: cfg.party.clone(),
             public_key: identity.public_key().to_vec(),
             nonce: my_nonce.clone(),
+            ephemeral: my_eph_bytes.clone(),
         },
     )
     .await?;
 
-    let (peer_party, peer_pubkey, peer_nonce) = match read_msg(reader).await? {
+    let (peer_party, peer_pubkey, peer_nonce, peer_eph) = match read_msg(reader).await? {
         AuthMsg::Hello {
             party,
             public_key,
             nonce,
-        } => (party, public_key, nonce),
+            ephemeral,
+        } => (party, public_key, nonce, ephemeral),
         _ => return Err(AuthError::Unexpected),
     };
 
@@ -140,7 +255,7 @@ where
         return Err(AuthError::KeyMismatch(peer_party));
     }
 
-    let proof = identity.sign_bytes(&proof_message(&peer_nonce, &cfg.party));
+    let proof = identity.sign_bytes(&proof_message(&peer_nonce, &cfg.party, &my_eph_bytes));
     write_msg(writer, &AuthMsg::Proof { signature: proof }).await?;
 
     let peer_sig = match read_msg(reader).await? {
@@ -150,15 +265,43 @@ where
 
     verify_bytes(
         &peer_pubkey,
-        &proof_message(&my_nonce, &peer_party),
+        &proof_message(&my_nonce, &peer_party, &peer_eph),
         &peer_sig,
     )
     .map_err(|_| AuthError::BadProof)?;
 
-    Ok(PeerInfo {
-        party: peer_party,
-        public_key: peer_pubkey,
-    })
+    let peer_eph_arr: [u8; 32] = peer_eph
+        .as_slice()
+        .try_into()
+        .map_err(|_| AuthError::BadEphemeralKey)?;
+    let shared = my_eph_secret.diffie_hellman(&XPublicKey::from(peer_eph_arr));
+    let session = build_session(shared.as_bytes(), &my_eph_bytes, &peer_eph);
+
+    Ok((
+        PeerInfo {
+            party: peer_party,
+            public_key: peer_pubkey,
+        },
+        session,
+    ))
+}
+
+fn build_session(shared: &[u8; 32], my_eph: &[u8], peer_eph: &[u8]) -> Session {
+    let (initiator, responder, i_am_initiator) = if my_eph < peer_eph {
+        (my_eph, peer_eph, true)
+    } else {
+        (peer_eph, my_eph, false)
+    };
+    let keys = derive_session_keys(shared, initiator, responder);
+    let mut key_a = [0u8; 32];
+    let mut key_b = [0u8; 32];
+    key_a.copy_from_slice(&keys[..32]);
+    key_b.copy_from_slice(&keys[32..]);
+    if i_am_initiator {
+        Session::new(key_a, key_b)
+    } else {
+        Session::new(key_b, key_a)
+    }
 }
 
 #[cfg(test)]
@@ -216,8 +359,15 @@ mod tests {
 
         let ra = ja.await.unwrap().expect("v1 authenticates v2");
         let rb = jb.await.unwrap().expect("v2 authenticates v1");
-        assert_eq!(ra.party, "v2");
-        assert_eq!(rb.party, "v1");
+        assert_eq!(ra.0.party, "v2");
+        assert_eq!(rb.0.party, "v1");
+
+        let mut sa = ra.1;
+        let mut sb = rb.1;
+        let frame = sa.seal(b"proposal block 7").unwrap();
+        assert_ne!(frame, b"proposal block 7", "frame must be ciphertext");
+        let opened = sb.open(&frame).unwrap();
+        assert_eq!(opened, b"proposal block 7");
     }
 
     #[tokio::test]

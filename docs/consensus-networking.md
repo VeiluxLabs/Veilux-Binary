@@ -59,6 +59,12 @@ Crate: `store` (`veilux-store`).
   human-inspectable, crash-friendly.
 - **State snapshot** (`state.json`): the authenticated `StateTree`, written
   atomically (temp file + rename) so a crash never leaves a half-written state.
+- **Persistent mempool** (`mempool.jsonl`): each accepted-but-not-yet-included
+  signed transaction is appended here, so pending work survives a restart. On
+  startup `Node::with_store` replays the log back into the in-memory mempool
+  (re-validating each entry), and after every committed block the log is
+  rewritten to keep only the transactions still pending. A crash between submit
+  and inclusion therefore no longer silently drops a user's transaction.
 
 ```rust
 let store = Store::open("./veilux-data")?;
@@ -139,6 +145,27 @@ registered validator to join — observing or replaying traffic is not enough
 checked first, so the owner decides which source addresses may even attempt a
 handshake. The `veilux validator` command exposes this as `--secure` plus
 `--allow-ip <IP>` (repeatable).
+
+### Encrypted transport (confidential gossip)
+
+The authenticated handshake also establishes an **end-to-end encrypted channel**,
+so peers on a shared or hostile network cannot read or tamper with consensus
+traffic. Alongside its `Hello`, each side sends a fresh **X25519 ephemeral
+public key**, and that ephemeral key is folded into the bytes it signs in the
+`Proof` step. Because the ephemeral key is signed by the validator's long-term
+Ed25519 identity, a man-in-the-middle cannot substitute its own key — doing so
+would invalidate the proof. Both sides then compute the same X25519 shared
+secret and derive, via BLAKE3-XOF (domain `veilux/net-session/v1`), a pair of
+**ChaCha20-Poly1305** keys — one per direction, assigned deterministically by
+ordering the two ephemeral keys.
+
+After the handshake every gossip frame (proposals, votes, blocks, commands) is
+sealed with a per-direction counter nonce and sent as hex-encoded ciphertext. A
+frame that fails to decrypt — tampering, reordering, or replay — drops the peer.
+This is forward-secret: the ephemeral keys are discarded when the connection
+closes, so a later compromise of a validator's identity key cannot decrypt
+captured past traffic. Encryption is on whenever `--secure` is set; the open
+dev transport (no `auth`) stays plaintext for easy local inspection.
 
 ---
 

@@ -5,7 +5,7 @@ use tracing::info;
 use veilux_rpc::server::RpcServer;
 use veilux_rpc::types::{codes, RpcRequest, RpcResponse};
 
-use crate::eth::{eth_balance, eth_nonce, eth_receipt};
+use crate::eth::{eth_balance, eth_code, eth_nonce, eth_receipt};
 use crate::node::Node;
 
 pub struct EthRpcState {
@@ -60,6 +60,38 @@ async fn dispatch(state: Arc<EthRpcState>, req: RpcRequest) -> RpcResponse {
             ok(id, hex_quantity(n.current_base_price().max(1)))
         }
         "eth_estimateGas" => ok(id, "0x5208"),
+        "eth_getCode" => {
+            let Some(addr) = first_str(&req, 0).and_then(|s| parse_addr(&s)) else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "bad address");
+            };
+            let n = state.node.lock().await;
+            ok(id, format!("0x{}", hex::encode(eth_code(&n.state, &addr))))
+        }
+        "eth_call" => {
+            let to = req
+                .params
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|o| o.get("to"))
+                .and_then(|v| v.as_str())
+                .and_then(parse_addr);
+            let data = req
+                .params
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|o| o.get("data"))
+                .and_then(|v| v.as_str())
+                .map(|s| hex::decode(s.strip_prefix("0x").unwrap_or(s)).unwrap_or_default())
+                .unwrap_or_default();
+            let Some(to) = to else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'to'");
+            };
+            let n = state.node.lock().await;
+            match n.eth_call(&to, data) {
+                Ok(out) => ok(id, format!("0x{}", hex::encode(out))),
+                Err(e) => RpcResponse::err(id, codes::COMMAND_REJECTED, e.to_string()),
+            }
+        }
         "eth_blockNumber" => {
             let n = state.node.lock().await;
             ok(id, hex_quantity(n.head().height as u128))
@@ -91,11 +123,22 @@ async fn dispatch(state: Arc<EthRpcState>, req: RpcRequest) -> RpcResponse {
                 Ok(applied) => {
                     let _ = n.produce_block();
                     drop(n);
+                    let to_str = match applied.to {
+                        Some(a) => format!("0x{}", hex::encode(a)),
+                        None => "<deploy>".to_string(),
+                    };
+                    let created = applied
+                        .contract_address
+                        .map(|a| format!("0x{}", hex::encode(a)))
+                        .unwrap_or_default();
                     info!(
                         from = %format!("0x{}", hex::encode(applied.from)),
-                        to = %format!("0x{}", hex::encode(applied.to)),
+                        to = %to_str,
+                        contract = %created,
                         value = applied.value,
                         nonce = applied.nonce,
+                        gas_used = applied.gas_used,
+                        logs = applied.logs.len(),
                         "eth tx applied"
                     );
                     ok(id, format!("0x{}", hex::encode(applied.hash)))
@@ -120,6 +163,11 @@ async fn dispatch(state: Arc<EthRpcState>, req: RpcRequest) -> RpcResponse {
             match eth_receipt(&n.state, &hash) {
                 Some(r) => {
                     let bn = r.get("block_number").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let gas = r.get("gas_used").and_then(|v| v.as_u64()).unwrap_or(21_000);
+                    let contract = r
+                        .get("contract_address")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
                     let receipt = serde_json::json!({
                         "transactionHash": h,
                         "transactionIndex": "0x0",
@@ -127,9 +175,9 @@ async fn dispatch(state: Arc<EthRpcState>, req: RpcRequest) -> RpcResponse {
                         "blockHash": format!("0x{}", hex::encode([0u8; 32])),
                         "from": r.get("from").cloned().unwrap_or(serde_json::Value::Null),
                         "to": r.get("to").cloned().unwrap_or(serde_json::Value::Null),
-                        "cumulativeGasUsed": "0x5208",
-                        "gasUsed": "0x5208",
-                        "contractAddress": serde_json::Value::Null,
+                        "cumulativeGasUsed": hex_quantity(gas as u128),
+                        "gasUsed": hex_quantity(gas as u128),
+                        "contractAddress": contract,
                         "logs": [],
                         "logsBloom": format!("0x{}", hex::encode([0u8; 256])),
                         "status": "0x1",
@@ -154,7 +202,6 @@ async fn dispatch(state: Arc<EthRpcState>, req: RpcRequest) -> RpcResponse {
             });
             ok(id, block)
         }
-        "eth_call" => ok(id, "0x"),
         other => RpcResponse::err(
             id,
             codes::METHOD_NOT_FOUND,

@@ -1,10 +1,10 @@
-# VEILUX EVM Compatibility (eth_* RPC)
+# VEILUX EVM Compatibility (eth_* RPC + bytecode execution)
 
-VEILUX is not an EVM chain — its native execution is the Prism/cascade model
-with Ed25519 signatures. But to be reachable by the existing Ethereum tooling
-ecosystem (MetaMask, ethers.js, web3.js, hardware wallets), a node can expose an
-**Ethereum-compatible JSON-RPC shim** that speaks `eth_*` and understands real
-secp256k1-signed, EIP-155 transactions.
+VEILUX is privacy-first and natively runs the Prism/cascade model with Ed25519
+signatures. On top of that it ships a real **EVM execution layer** plus an
+**Ethereum-compatible JSON-RPC shim** (`eth_*`), so it can both be reached by the
+existing Ethereum tooling ecosystem (MetaMask, ethers.js, web3.js, hardware
+wallets) and **run real Solidity contract bytecode** — deploy, call, and read.
 
 ```bash
 veilux serve --addr 127.0.0.1:8645 \
@@ -31,10 +31,38 @@ Then in MetaMask → *Add network manually*:
   canonical EIP-155 mainnet test vector.
 - **Replay protection.** The transaction's `chain_id` (from the `v` value) must
   match the node's chain id, so a tx signed for another chain is rejected.
-- **Application.** A value transfer moves native LUX from the recovered sender
-  party to the recipient party, increments the sender's eth nonce, writes a
-  receipt, and produces a block. Sender balance, recipient balance, nonce, and
-  receipt are then queryable via the standard methods.
+- **Contract deployment.** A transaction with `to = null` runs its `data` as EVM
+  init code; the bytecode it `RETURN`s is stored as the runtime code of the new
+  contract. The contract address is `keccak256(rlp(sender, nonce))[12..]`, the
+  same derivation Ethereum uses.
+- **Contract calls.** A transaction to an address that holds code runs that
+  runtime code with the tx `data` as calldata, executing genuine `SLOAD`/`SSTORE`
+  against persisted contract storage. `eth_call` runs the same path read-only
+  against a throwaway copy of state (no block produced, no nonce change).
+- **Application.** Value (if any) moves native LUX from the recovered sender to
+  the recipient, the EVM executes, the sender's eth nonce increments, a receipt
+  (with `contractAddress`, `gasUsed`, `status`) is written, and a block is
+  produced.
+
+## The EVM (`veilux-evm` crate)
+
+A from-scratch, dependency-light interpreter (no `revm`):
+
+- **`U256`** — full 256-bit integer: add/sub/mul, unsigned and signed div/mod,
+  shifts (`SHL`/`SHR`/`SAR`), bitwise ops, `SIGNEXTEND`, `EXP`, comparisons.
+- **`Interpreter`** — the mainstream opcode set: arithmetic (incl. signed
+  `SDIV`/`SMOD`/`SLT`/`SGT`), `KECCAK256`, environment/context (`ADDRESS`,
+  `CALLER`, `CALLVALUE`, `CALLDATA*`, `CODECOPY`, `NUMBER`, `TIMESTAMP`,
+  `CHAINID`, `GAS`), memory (`MLOAD`/`MSTORE`/`MSTORE8`), storage
+  (`SLOAD`/`SSTORE`), control flow (`JUMP`/`JUMPI` with jumpdest analysis),
+  `PUSH1`–`PUSH32`, `DUP1`–`DUP16`, `SWAP1`–`SWAP16`, `LOG0`–`LOG4`, and
+  `RETURN`/`REVERT`. Gas is metered and bounded; memory is capped.
+- **`Host` trait** — the node implements it (`StateHost`) to bridge EVM storage,
+  balances, and block context to the VEILUX `StateTree`.
+
+A 4-byte-selector dispatched storage contract (the classic Solidity
+`store(uint256)` / `retrieve()`) runs end to end: `store(424242)` then
+`retrieve()` returns `424242` via real `SSTORE`/`SLOAD` and ABI return encoding.
 
 ## Supported methods
 
@@ -44,18 +72,20 @@ Then in MetaMask → *Add network manually*:
 | `eth_blockNumber` | current height |
 | `eth_getBalance` | native LUX balance of an eth address |
 | `eth_getTransactionCount` | account nonce (for tx ordering) |
+| `eth_getCode` | deployed runtime bytecode at an address |
+| `eth_call` | read-only contract execution (no state change) |
 | `eth_gasPrice`, `eth_estimateGas` | base price / fixed 21000 transfer cost |
-| `eth_sendRawTransaction` | submit a signed value transfer; returns the tx hash |
-| `eth_getTransactionReceipt` | poll for confirmation (status `0x1`) |
+| `eth_sendRawTransaction` | submit a signed transfer, deploy, or contract call; returns the tx hash |
+| `eth_getTransactionReceipt` | poll for confirmation (`status`, `contractAddress`, `gasUsed`) |
 | `eth_getBlockByNumber` | head block summary |
 | `web3_clientVersion`, `eth_syncing`, `net_listening` | wallet handshake |
 
 ## Limitations (honest scope)
 
-- **Value transfers only.** Contract creation and `data`/contract calls are
-  rejected (`Unsupported`) — the shim does not run EVM bytecode. VEILUX smart
-  contracts use the PhotonVM Prism, not EVM bytecode. A full EVM execution layer
-  (running Solidity bytecode) would be a separate, much larger Prism.
+- **No inter-contract calls yet.** `CALL`/`DELEGATECALL`/`STATICCALL`/`CREATE`
+  from within a running contract are not yet wired (the dispatch covers a single
+  contract frame). Single-contract storage/logic dApps run today; calling
+  another contract mid-execution is the next step.
 - **Legacy + EIP-155 transactions only.** Typed-envelope transactions
   (EIP-2718/1559, `0x02…`) are rejected; configure wallets to use legacy gas.
 - **Global chain-id uniqueness is a social convention.** To avoid clashes,
@@ -69,4 +99,7 @@ The shim reuses the same value-conservation guarantees as the Token Prism:
 create value. Sender authenticity rests on secp256k1 recovery (a forged or
 wrong-chain signature recovers a different/zero address and fails). The reserved
 `eth:` party namespace contains `:` but not `/`, so it does not collide with the
-internal system-account guard (`/`).
+internal system-account guard (`/`). EVM execution runs against a trial copy of
+state and is only committed if the transaction succeeds; a revert rolls back all
+storage writes.
+

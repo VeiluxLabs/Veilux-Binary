@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use tracing::{debug, info};
-use veilux_kernel::{Block, StateTree};
+use veilux_kernel::{Block, SignedCommand, StateTree};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -19,6 +19,7 @@ pub struct Store {
     dir: PathBuf,
     blocks_path: PathBuf,
     state_path: PathBuf,
+    mempool_path: PathBuf,
 }
 
 impl Store {
@@ -27,6 +28,7 @@ impl Store {
         fs::create_dir_all(&dir)?;
         let blocks_path = dir.join("blocks.jsonl");
         let state_path = dir.join("state.json");
+        let mempool_path = dir.join("mempool.jsonl");
         if !blocks_path.exists() {
             File::create(&blocks_path)?;
         }
@@ -35,6 +37,7 @@ impl Store {
             dir,
             blocks_path,
             state_path,
+            mempool_path,
         })
     }
 
@@ -92,6 +95,50 @@ impl Store {
         let bytes = fs::read(&self.state_path)?;
         let state: StateTree = serde_json::from_slice(&bytes)?;
         Ok(Some(state))
+    }
+
+    pub fn append_pending(&self, signed: &SignedCommand) -> Result<(), StoreError> {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.mempool_path)?;
+        let line = serde_json::to_string(signed)?;
+        writeln!(f, "{line}")?;
+        debug!(party = %signed.command.submitter.0, nonce = signed.command.nonce, "pending tx persisted");
+        Ok(())
+    }
+
+    pub fn load_pending(&self) -> Result<Vec<SignedCommand>, StoreError> {
+        if !self.mempool_path.exists() {
+            return Ok(Vec::new());
+        }
+        let f = File::open(&self.mempool_path)?;
+        let reader = BufReader::new(f);
+        let mut pending = Vec::new();
+        for line in reader.lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(signed) = serde_json::from_str::<SignedCommand>(&line) {
+                pending.push(signed);
+            }
+        }
+        debug!(count = pending.len(), "pending txs loaded from mempool log");
+        Ok(pending)
+    }
+
+    pub fn rewrite_pending(&self, pending: &[SignedCommand]) -> Result<(), StoreError> {
+        let tmp = self.mempool_path.with_extension("jsonl.tmp");
+        let mut f = File::create(&tmp)?;
+        for signed in pending {
+            let line = serde_json::to_string(signed)?;
+            writeln!(f, "{line}")?;
+        }
+        f.flush()?;
+        fs::rename(&tmp, &self.mempool_path)?;
+        debug!(count = pending.len(), "mempool log rewritten");
+        Ok(())
     }
 }
 

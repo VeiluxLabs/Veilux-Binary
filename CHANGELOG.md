@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-06
+
+### Added
+- **Full EVM bytecode execution — run real Solidity contracts.** The new
+  `veilux-evm` crate gained a from-scratch, dependency-light EVM (no `revm`): a
+  complete 256-bit integer (`U256` with signed/unsigned arithmetic, shifts,
+  `EXP`, `SIGNEXTEND`) and an `Interpreter` covering the mainstream opcode set —
+  arithmetic, `KECCAK256`, environment/context (`CALLER`, `CALLVALUE`,
+  `CALLDATA*`, `CODECOPY`, `NUMBER`, `TIMESTAMP`, `CHAINID`, `GAS`), memory,
+  `SLOAD`/`SSTORE`, `JUMP`/`JUMPI` with jumpdest analysis, `PUSH1`–`PUSH32`,
+  `DUP`/`SWAP`, `LOG0`–`LOG4`, and `RETURN`/`REVERT`, with metered gas and bounded
+  memory. The node implements the EVM `Host` against its `StateTree`, so
+  `eth_sendRawTransaction` now supports **contract deployment** (`to = null`
+  runs init code and stores the returned runtime code at the
+  `keccak256(rlp(sender, nonce))` address) and **contract calls** (runs runtime
+  code with real persistent storage), plus read-only `eth_call` and `eth_getCode`.
+  Verified live over RPC: deploying the classic selector-dispatched storage
+  contract, calling `store(424242)`, then `eth_call retrieve()` returns `424242`
+  via genuine `SSTORE`/`SLOAD` and ABI return encoding; the receipt reports the
+  contract address, gas used, and `status 0x1`, and the nonce advances correctly.
+- **Persistent mempool.** Accepted-but-not-yet-included transactions are now
+  written to `mempool.jsonl` and replayed (re-validated) on startup, so pending
+  work survives a node restart instead of being silently dropped. The log is
+  rewritten after each committed block (and after poison-command pruning) to keep
+  only still-pending transactions. Regression test
+  `pending_transactions_survive_restart`.
+- **Encrypted P2P transport (confidential, forward-secret gossip).** The
+  `--secure` handshake now also performs an **authenticated X25519 ephemeral key
+  exchange** — the ephemeral key is signed under each validator's long-term
+  Ed25519 identity, so a man-in-the-middle cannot substitute its own key. Both
+  sides derive per-direction **ChaCha20-Poly1305** keys (BLAKE3-XOF KDF) and every
+  gossip frame (proposals, votes, blocks, commands) is sealed with a counter
+  nonce; a frame that fails to decrypt (tamper/reorder/replay) drops the peer.
+  Forward-secret: ephemeral keys are discarded on disconnect. Verified live: a
+  4-validator secure network finalizes in lockstep at byte-identical hashes
+  (`power=300 quorum=267`) entirely over the encrypted channel.
+
+### Changed
+- `eth_getTransactionReceipt` now reports `contractAddress` and `gasUsed`; the
+  `EthApplied.to` field is `Option` (a deploy has no `to`). See
+  `docs/evm-compat.md` for the updated scope (single-contract execution today;
+  inter-contract `CALL`/`CREATE` is the next step).
+
 ## [0.5.1] - 2026-06-05
 
 ### Changed
@@ -364,7 +407,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.9...v0.4.0

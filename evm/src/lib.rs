@@ -1,4 +1,6 @@
 pub mod rlp;
+pub mod u256;
+pub mod vm;
 
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use sha3::{Digest, Keccak256};

@@ -152,7 +152,41 @@ impl Node {
                 .map_err(|e| NodeError::Store(e.to_string()))?;
         }
         node.store = Some(store);
+        node.restore_mempool()?;
         Ok(node)
+    }
+
+    fn restore_mempool(&mut self) -> Result<(), NodeError> {
+        let pending = match &self.store {
+            Some(store) => store
+                .load_pending()
+                .map_err(|e| NodeError::Store(e.to_string()))?,
+            None => return Ok(()),
+        };
+        if pending.is_empty() {
+            return Ok(());
+        }
+        let mut restored = 0usize;
+        for signed in pending {
+            if self.ingest_signed(signed, false).is_ok() {
+                restored += 1;
+            }
+        }
+        if let Some(store) = &self.store {
+            let alive: std::collections::HashSet<Hash> =
+                self.mempool.iter().map(|c| c.id()).collect();
+            let kept: Vec<SignedCommand> = store
+                .load_pending()
+                .map_err(|e| NodeError::Store(e.to_string()))?
+                .into_iter()
+                .filter(|s| alive.contains(&s.command.id()))
+                .collect();
+            store
+                .rewrite_pending(&kept)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+        tracing::info!(restored, "pending transactions restored from disk");
+        Ok(())
     }
 
     pub fn host_party(&mut self, keyring: ViewKeyring) {
@@ -259,6 +293,10 @@ impl Node {
     }
 
     pub fn submit_signed(&mut self, signed: SignedCommand) -> Result<(), NodeError> {
+        self.ingest_signed(signed, true)
+    }
+
+    fn ingest_signed(&mut self, signed: SignedCommand, persist: bool) -> Result<(), NodeError> {
         let cmd = &signed.command;
 
         if cmd.payload.len() > self.limits.max_payload_bytes {
@@ -307,6 +345,13 @@ impl Node {
         }
 
         self.nonces.insert(cmd.submitter.clone(), cmd.nonce);
+        if persist {
+            if let Some(store) = &self.store {
+                store
+                    .append_pending(&signed)
+                    .map_err(|e| NodeError::Store(e.to_string()))?;
+            }
+        }
         self.mempool.push(signed.command);
         Ok(())
     }
@@ -361,6 +406,7 @@ impl Node {
         if !rejected.is_empty() {
             let drop: std::collections::HashSet<Hash> = rejected.into_iter().collect();
             self.mempool.retain(|c| !drop.contains(&c.id()));
+            self.sync_persisted_mempool()?;
         }
 
         let mut block = Block {
@@ -466,6 +512,7 @@ impl Node {
                 .save_state(&self.state)
                 .map_err(|e| NodeError::Store(e.to_string()))?;
         }
+        self.sync_persisted_mempool()?;
 
         Ok(summary)
     }
@@ -487,6 +534,23 @@ impl Node {
 
     pub fn current_base_price(&self) -> u128 {
         Self::base_price(&self.state, self.fee_policy)
+    }
+
+    fn sync_persisted_mempool(&self) -> Result<(), NodeError> {
+        if let Some(store) = &self.store {
+            let alive: std::collections::HashSet<Hash> =
+                self.mempool.iter().map(|c| c.id()).collect();
+            let kept: Vec<SignedCommand> = store
+                .load_pending()
+                .map_err(|e| NodeError::Store(e.to_string()))?
+                .into_iter()
+                .filter(|s| alive.contains(&s.command.id()))
+                .collect();
+            store
+                .rewrite_pending(&kept)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+        Ok(())
     }
 }
 
@@ -513,7 +577,6 @@ mod tests {
     use super::*;
     use veilux_kernel::{Cascade, Visibility};
     use veilux_veil::PartyIdentity;
-
     fn node() -> Node {
         let mut cascade = Cascade::new();
         cascade.install(Box::new(prism_token::TokenPrism::new()));
@@ -556,6 +619,59 @@ mod tests {
             true,
         );
         assert!(n.submit_signed(alice.sign(cmd)).is_ok());
+    }
+
+    #[test]
+    fn pending_transactions_survive_restart() {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("veilux-mempool-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+        let make = |nonce: u64| {
+            prism_token::create_command(
+                PartyId::new("alice"),
+                Visibility::Public,
+                nonce,
+                &format!("T{nonce}"),
+                &format!("T{nonce}"),
+                0,
+                1_000,
+                true,
+            )
+        };
+
+        {
+            let mut cascade = Cascade::new();
+            cascade.install(Box::new(prism_token::TokenPrism::new()));
+            let store = Store::open(&dir).unwrap();
+            let mut n = Node::with_store(PartyId::new("v0"), cascade, store).unwrap();
+            n.submit_signed(alice.sign(make(0))).unwrap();
+            n.submit_signed(alice.sign(make(1))).unwrap();
+            assert_eq!(n.mempool.len(), 2);
+        }
+
+        let mut cascade = Cascade::new();
+        cascade.install(Box::new(prism_token::TokenPrism::new()));
+        let store = Store::open(&dir).unwrap();
+        let mut n = Node::with_store(PartyId::new("v0"), cascade, store).unwrap();
+        assert_eq!(
+            n.mempool.len(),
+            2,
+            "both pending transactions must be restored from disk"
+        );
+
+        let summary = n.produce_block().unwrap();
+        assert_eq!(summary.height, 1);
+        assert!(n.mempool.is_empty());
+
+        let store2 = Store::open(&dir).unwrap();
+        assert!(
+            store2.load_pending().unwrap().is_empty(),
+            "persisted mempool log must be pruned after the block is committed"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
