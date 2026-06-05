@@ -1,0 +1,15 @@
+[package]
+name = "prism-nft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "NFT Prism — non-fungible tokens (ERC-721-like) for VEILUX"
+
+[dependencies]
+veilux-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+blake3.workspace = true

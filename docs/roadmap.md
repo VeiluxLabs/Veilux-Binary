@@ -1,0 +1,116 @@
+# VEILUX Roadmap — Future Add-ons (Prisms)
+
+Because every capability in VEILUX is a Prism, the roadmap is literally a list of
+add-ons. This document proposes the Prisms a future-facing chain needs — grounded
+in where the industry is heading (modular execution/DA/settlement, account &
+chain abstraction, ZK coprocessing, restaked security, confidential computing)
+and in needs that are still under-served today.
+
+Sources informing this roadmap are listed in §“References”. Content was rephrased
+for compliance with licensing restrictions.
+
+---
+
+## Tier 0 — Make it a real network (foundational)
+
+These aren't "future" so much as the next required steps to graduate from a
+local engine to a live chain.
+
+| Prism / Module | What it adds | Why |
+|----------------|--------------|-----|
+| **Consensus engine** | BFT/PoS proposer rotation + finality | Byzantine fault tolerance; the `Block.proposer` field is already there |
+| **Network layer** | libp2p gossip + block/view sync | Multi-node operation |
+| **Persistence** | append-only block store + state snapshots | Crash recovery, fast restart |
+| **`token` Prism** | native LUX accounts, transfers, fees | Pay for compute; the economic base layer |
+
+---
+
+## Tier 1 — The modern expected feature set
+
+Aligned with the dominant 2025–2026 design direction: a modular stack where
+execution, data availability, and settlement are distinct layers
+([IdeaSoft, 2026](https://ideasoft.io/blog/how-to-build-a-secure-dapp-checklist/);
+[2Z thesis, OneKey, 2025](https://onekey.so/blog/ecosystem/unlocking-alpha-the-case-for-2z-token/)).
+
+| Prism | Capability | Notes |
+|-------|------------|-------|
+| **Account Abstraction Prism** | programmable accounts, gasless/sponsored tx, session keys, social recovery | Mirrors EIP-4337 / EIP-7702 direction; UX comparable to web2 ([OKX, 2025](https://www.okx.com/en-us/learn/eip-sdk-implementation)) |
+| **Data Availability Prism** | erasure-coded blobs + DA sampling so light nodes verify availability without full download | A dedicated DA layer keeps nodes light ([OurCryptoTalk, 2025](https://ourcryptotalk.com/learn/da-layer-in-crypto-data-availability)) |
+| **ZK Coprocessor Prism** | offload heavy compute, verify a succinct proof on-chain | "Trust the math" path; complements Veil's message-based privacy |
+| **Restaking / Shared Security Prism** | let LUX stake secure external services (oracles, bridges, DA) | Programmable security as a primitive |
+| **Chain Abstraction Prism** | one UX across many chains; intents routed/settled behind the scenes | Account + chain abstraction together approach car-like ease of use ([Coinbureau](https://coinbureau.com/analysis/unifying-ethereum/)) |
+| **EVM/WASM Prism** | run existing smart contracts as just-another-Prism | Opt-in; the core never pays for it |
+
+---
+
+## Tier 2 — AI-native chain (VEILUX's differentiator)
+
+VEILUX is AI-native by design; these Prisms make that real and verifiable.
+
+| Prism | Capability |
+|-------|------------|
+| **Verifiable Compute Prism** | run real models in TEEs (Intel TDX / AMD SEV-SNP) with remote attestation, or attach ZK proofs of correct inference — so results are trustworthy without re-execution ([Chainlink, 2026](https://chain.link/article/confidential-computing-blockchain); [Phala, 2025](https://phala.com/de/learn/Confidential-Computing-in-Finance)) |
+| **Model Marketplace Prism** | stake-weighted model registry, royalties per inference, versioning, reputation |
+| **Federated Learning Prism** | coordinate private multi-party model training; only gradients/commitments on-chain, raw data stays in each party's sub-ledger |
+| **AI Agent Identity Prism** | first-class on-chain identities, spending limits, and capability scopes for autonomous AI agents transacting on the user's behalf |
+| **Data-Provenance Prism** | content credentials / watermark attestations so AI training data and outputs have verifiable origin |
+| **Inference Oracle Prism** | bring off-chain model outputs on-chain with a quorum + proof, for models too large to run deterministically |
+
+---
+
+## Tier 3 — Privacy & compliance (deepening the Veil)
+
+Builds on `docs/privacy-model.md` §7.
+
+| Prism | Capability |
+|-------|------------|
+| **X25519 Key-Exchange Prism** | wrap view keys to grantee public keys; remove shared-seed assumption |
+| **Proof-of-Reserves Prism** | prove solvency/holdings via range proofs without revealing balances |
+| **Compliance Prism** | policy-as-code (AML/KYC thresholds, travel rule) enforced at submission, with scoped regulator grants auto-issued |
+| **Metadata-Privacy Prism** | fixed-size view padding + epoch batching to defeat size/timing analysis |
+| **Confidential Token Prism** | encrypted balances and amounts with selective auditor disclosure |
+
+---
+
+## Tier 4 — Forward bets (under-served / "not yet thought of")
+
+Higher-risk, higher-reward Prisms for problems the space hasn't fully solved.
+
+| Prism | Problem it solves |
+|-------|-------------------|
+| **Post-Quantum Prism** | swap Ed25519/X25519 for ML-DSA/ML-KEM (NIST PQC) before quantum attacks are practical; the kernel keeps crypto behind traits to make this a drop-in |
+| **Time-Lock / VDF Prism** | verifiable delay functions for fair ordering and MEV resistance; encrypt-to-the-future for sealed-bid auctions |
+| **Intent & Solver Prism** | users express *what* they want; a competitive solver market finds *how*, settled atomically |
+| **Programmable Privacy Prism** | per-field visibility policies attached to data that travel with it across Prisms and chains |
+| **Reversible/Recoverable Tx Prism** | bounded dispute window with multi-party arbitration for regulated finance (escape from "code is law" rigidity) |
+| **Carbon/Resource Accounting Prism** | meter and attest the energy/compute footprint of each block — increasingly a compliance requirement |
+| **Decentralized Identity (DID/VC) Prism** | reusable, privacy-preserving credentials; present a proof of a claim without revealing the underlying document |
+| **AI Safety / Kill-Switch Prism** | on-chain governance to pause or rate-limit autonomous agents exhibiting anomalous behavior |
+| **Cross-Prism Composability Bus** | typed, capability-checked message passing between Prisms beyond the linear cascade (a DAG of capabilities) |
+
+---
+
+## How a new Prism graduates
+
+```
+idea → spec (docs/add-ons.md format) → reference Prism crate under prisms/
+     → determinism + security review (docs/security.md checklist)
+     → tests green → install in node cascade → ship
+```
+
+No kernel fork is ever required: that is the whole point of the Prism model.
+
+---
+
+## References
+
+- IdeaSoft — Secure dApp checklist 2026: https://ideasoft.io/blog/how-to-build-a-secure-dapp-checklist/
+- OneKey — modular DA / ZK / restaking thesis: https://onekey.so/blog/ecosystem/unlocking-alpha-the-case-for-2z-token/
+- OKX — EIP-7702 / account abstraction: https://www.okx.com/en-us/learn/eip-sdk-implementation
+- Coinbureau — Account & Chain Abstraction: https://coinbureau.com/analysis/unifying-ethereum/
+- OurCryptoTalk — Data Availability layer: https://ourcryptotalk.com/learn/da-layer-in-crypto-data-availability
+- Chainlink — Confidential Computing for Blockchain: https://chain.link/article/confidential-computing-blockchain
+- Phala — Confidential Computing in Finance: https://phala.com/de/learn/Confidential-Computing-in-Finance
+
+*All external content above was rephrased/summarized for compliance with
+licensing restrictions; see links for originals.*

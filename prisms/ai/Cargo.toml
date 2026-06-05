@@ -1,0 +1,20 @@
+[package]
+name = "prism-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "AI Prism — on-chain model registry and verifiable inference for VEILUX"
+
+[features]
+default = []
+ollama = ["dep:ureq"]
+
+[dependencies]
+veilux-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+blake3.workspace = true
+ureq = { workspace = true, optional = true }

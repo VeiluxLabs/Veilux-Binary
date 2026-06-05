@@ -1,0 +1,18 @@
+[package]
+name = "veilux-veil"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Veil — Canton-style party-based privacy and sub-ledger projections for VEILUX"
+
+[dependencies]
+veilux-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+blake3.workspace = true
+chacha20poly1305.workspace = true
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }

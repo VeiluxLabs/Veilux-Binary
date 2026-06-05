@@ -1,0 +1,31 @@
+[package]
+name = "veilux-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "VEILUX node — assembles the Photon kernel, Veil privacy, and Prisms"
+
+[[bin]]
+name = "veilux"
+path = "src/main.rs"
+
+[features]
+default = []
+ollama = ["prism-ai/ollama"]
+
+[dependencies]
+veilux-kernel.workspace = true
+veilux-veil.workspace = true
+prism-ai.workspace = true
+prism-storage.workspace = true
+prism-token.workspace = true
+prism-nft.workspace = true
+prism-contract.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

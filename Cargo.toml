@@ -1,0 +1,53 @@
+[workspace]
+members = [
+    "kernel",
+    "veil",
+    "prisms/ai",
+    "prisms/storage",
+    "prisms/token",
+    "prisms/nft",
+    "prisms/contract",
+    "node",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["nathan <elanmirtan@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "VEILUX — a featherweight, privacy-first, AI-native modular blockchain"
+repository = "https://github.com/VeiluxLabs/Veilux-Binary"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+hex = "0.4"
+blake3 = "1"
+chacha20poly1305 = "0.10"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+anyhow = "1"
+
+veilux-kernel = { path = "kernel" }
+veilux-veil = { path = "veil" }
+prism-ai = { path = "prisms/ai" }
+prism-storage = { path = "prisms/storage" }
+prism-token = { path = "prisms/token" }
+prism-nft = { path = "prisms/nft" }
+prism-contract = { path = "prisms/contract" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
