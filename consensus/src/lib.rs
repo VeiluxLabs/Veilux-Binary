@@ -256,25 +256,15 @@ mod tests {
 
     #[test]
     fn voting_across_views_is_not_equivocation() {
-        // A leader failure forces a view change: the same validators must be
-        // able to vote for a *different* block at the same height in a higher
-        // round. Votes are tallied per (height, round), so this is legal and
-        // the higher view can still reach finality. (Regression: previously
-        // votes were keyed by height only, so the second view's prevote was
-        // rejected as equivocation and the chain could never finalize after a
-        // single view change.)
         let mut e = engine();
         let view0 = Hash::digest(b"view-0-block");
         let view1 = Hash::digest(b"view-1-block");
 
-        // Round 0 stalls (proposer offline): a couple of prevotes trickle in.
         e.add_vote(&vote_at("v1", 1, 0, view0, VoteKind::Prevote))
             .unwrap();
         e.add_vote(&vote_at("v2", 1, 0, view0, VoteKind::Prevote))
             .unwrap();
 
-        // Round 1 with a new proposer and a new block: same voters, no
-        // equivocation error, and the round reaches its own prevote quorum.
         for v in ["v1", "v2", "v3"] {
             e.add_vote(&vote_at(v, 1, 1, view1, VoteKind::Prevote))
                 .expect("higher-round prevote must be accepted");
@@ -282,7 +272,6 @@ mod tests {
         assert!(e.has_prevote_quorum(1, 1, &view1));
         assert!(!e.has_prevote_quorum(1, 0, &view1));
 
-        // Precommits in round 1 finalize the new block.
         for v in ["v1", "v2", "v3"] {
             let out = e
                 .add_vote(&vote_at(v, 1, 1, view1, VoteKind::Precommit))

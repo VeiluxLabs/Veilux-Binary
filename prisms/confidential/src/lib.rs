@@ -20,8 +20,6 @@ mod u128_dec {
 const TOKEN_PREFIX: &str = "confidential/token/";
 const NOTE_PREFIX: &str = "confidential/note/";
 
-/// A confidential token's public metadata. Balances are NOT stored here — only
-/// note commitments (below) ever touch public state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfTokenMeta {
     pub token_id: Hash,
@@ -30,28 +28,20 @@ pub struct ConfTokenMeta {
     pub admin: PartyId,
 }
 
-/// Public record of a note. The amount and owner are hidden inside the
-/// commitment; only the spent flag and the owning token are public.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NoteState {
     pub token_id: Hash,
     pub spent: bool,
 }
 
-/// The secret opening of a note. Delivered to stakeholders through the Veil
-/// encrypted view (the command/event carry `Visibility::Parties`), never on the
-/// public ledger.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NoteOpening {
     pub owner: PartyId,
     #[serde(with = "u128_dec")]
     pub amount: u128,
-    /// Random blinding factor (hex) that hides the amount in the commitment.
     pub blinding: String,
 }
 
-/// commitment = H("veilux/conf/note" ‖ token ‖ owner ‖ amount_le ‖ blinding).
-/// Hiding rests on the blinding factor; binding rests on the hash.
 pub fn note_commitment(token_id: &Hash, opening: &NoteOpening) -> Hash {
     Hash::commit(
         "veilux/conf/note",
@@ -67,19 +57,14 @@ pub fn note_commitment(token_id: &Hash, opening: &NoteOpening) -> Hash {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum ConfidentialCommand {
-    /// Create a confidential token (the submitter becomes its admin).
-    CreateToken { name: String, symbol: String },
-    /// Admin issues a new note (commitment) backed by an opening the admin
-    /// attests. The opening rides in `Visibility::Parties` so the public sees
-    /// only the commitment.
+    CreateToken {
+        name: String,
+        symbol: String,
+    },
     Mint {
         token_id: Hash,
         opening: NoteOpening,
     },
-    /// Spend one note and create output notes. The prism checks the input
-    /// opening matches an unspent note and that outputs conserve value; it then
-    /// nullifies the input and records the output commitments. Openings are
-    /// sealed to the involved parties.
     Transfer {
         token_id: Hash,
         input: NoteOpening,
@@ -94,7 +79,6 @@ pub enum ConfidentialEvent {
         token_id: Hash,
         symbol: String,
     },
-    /// Only commitments are published. Amounts/owners stay in the sealed view.
     NoteCreated {
         token_id: Hash,
         commitment: Hash,
@@ -238,7 +222,6 @@ impl Prism for ConfidentialPrism {
                 if outputs.is_empty() {
                     return Err(PrismError::InvalidPayload("at least one output".into()));
                 }
-                // Spender must own the input note.
                 if input.owner != command.submitter {
                     return Err(PrismError::Unauthorized(
                         "only the note owner can spend it".into(),
@@ -250,7 +233,6 @@ impl Prism for ConfidentialPrism {
                 if note.spent {
                     return Err(PrismError::InvalidPayload("note already spent".into()));
                 }
-                // Value conservation: outputs must sum to the input amount.
                 let out_sum: u128 = outputs
                     .iter()
                     .try_fold(0u128, |acc, o| acc.checked_add(o.amount))
@@ -260,7 +242,6 @@ impl Prism for ConfidentialPrism {
                         "outputs do not conserve value".into(),
                     ));
                 }
-                // Compute output commitments and reject duplicates / collisions.
                 let mut out_commits = Vec::with_capacity(outputs.len());
                 for o in &outputs {
                     if o.amount == 0 {
@@ -272,7 +253,6 @@ impl Prism for ConfidentialPrism {
                     }
                     out_commits.push(c);
                 }
-                // Nullify input, create outputs.
                 Self::put_note(
                     state,
                     &in_commit,
@@ -311,10 +291,6 @@ impl Prism for ConfidentialPrism {
     }
 }
 
-/// Selective disclosure: verify that a claimed opening corresponds to a note
-/// recorded on-chain. An auditor given `(token_id, opening)` can confirm the
-/// hidden amount/owner without the holder revealing anything else. Returns
-/// `Some(spent)` if the note exists.
 pub fn disclose_note(state: &StateTree, token_id: &Hash, opening: &NoteOpening) -> Option<bool> {
     let commitment = note_commitment(token_id, opening);
     ConfidentialPrism::note(state, &commitment).map(|n| n.spent)
@@ -394,13 +370,10 @@ mod tests {
         let token = create(&p, &mut s);
         mint(&p, &mut s, token, &opening("alice", 1_000, "r1"), 1);
 
-        // The only confidential keys in state are token meta + note commitments;
-        // no key contains a plaintext balance/amount.
         let notes: Vec<_> = s.iter_prefix("confidential/note/").collect();
         assert_eq!(notes.len(), 1);
         let commitment = note_commitment(&token, &opening("alice", 1_000, "r1"));
         assert!(disclose_note(&s, &token, &opening("alice", 1_000, "r1")).is_some());
-        // A wrong amount guess does not match the commitment.
         assert!(disclose_note(&s, &token, &opening("alice", 999, "r1")).is_none());
         let _ = commitment;
     }
@@ -413,7 +386,6 @@ mod tests {
         let note = opening("alice", 1_000, "r1");
         mint(&p, &mut s, token, &note, 1);
 
-        // alice splits 1000 -> 700 (bob) + 300 (alice change)
         let out_bob = opening("bob", 700, "r2");
         let out_change = opening("alice", 300, "r3");
         let payload = serde_json::to_vec(&ConfidentialCommand::Transfer {
@@ -431,7 +403,6 @@ mod tests {
         };
         p.handle(&cmd, &mut s).unwrap();
 
-        // input is now spent; outputs exist and are unspent.
         assert_eq!(disclose_note(&s, &token, &note), Some(true));
         assert_eq!(disclose_note(&s, &token, &out_bob), Some(false));
         assert_eq!(disclose_note(&s, &token, &out_change), Some(false));
@@ -445,7 +416,6 @@ mod tests {
         let note = opening("alice", 1_000, "r1");
         mint(&p, &mut s, token, &note, 1);
 
-        // outputs sum to 1100 != 1000
         let payload = serde_json::to_vec(&ConfidentialCommand::Transfer {
             token_id: token,
             input: note.clone(),
@@ -503,7 +473,6 @@ mod tests {
             outputs: vec![opening("bob", 500, "r2")],
         })
         .unwrap();
-        // mallory (not the owner) tries to spend alice's note
         let cmd = Command {
             prism: "confidential".into(),
             submitter: PartyId::new("mallory"),

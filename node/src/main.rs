@@ -2,6 +2,7 @@ mod driver;
 mod genesis;
 mod node;
 mod rpc_service;
+mod slash_watch;
 mod validator_loop;
 mod viewsync;
 
@@ -78,15 +79,12 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .position(|a| a == "--ws")
         .and_then(|i| args.get(i + 1))
         .cloned()
-        .unwrap_or_else(|| {
-            // Default WS port = RPC port + 1.
-            match addr.rsplit_once(':') {
-                Some((host, port)) => {
-                    let p: u16 = port.parse().unwrap_or(8645);
-                    format!("{host}:{}", p + 1)
-                }
-                None => "127.0.0.1:8646".to_string(),
+        .unwrap_or_else(|| match addr.rsplit_once(':') {
+            Some((host, port)) => {
+                let p: u16 = port.parse().unwrap_or(8645);
+                format!("{host}:{}", p + 1)
             }
+            None => "127.0.0.1:8646".to_string(),
         });
 
     let mut cascade = Cascade::new();

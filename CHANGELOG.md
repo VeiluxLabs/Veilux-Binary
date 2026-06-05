@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-06-05
+
+### Added
+- **Automatic equivocation detection & slashing.** Each validator now watches
+  incoming consensus votes and, the moment it sees a peer sign two different
+  blocks for the same height/round, it builds signed equivocation evidence and
+  submits a `staking.slash` command (gossiped to the network). Honest repeat
+  votes are ignored, and each offender is reported at most once. This closes the
+  loop from the manual slashing primitive to fully on-chain enforcement.
+
+### Changed
+- **README rewritten** to cover the full current system: nine Prisms, Aurora BFT
+  with auto-slashing, authenticated transport, configurable genesis token, fees,
+  staking, governance, and the confidential token.
+
 ## [0.3.5] - 2026-06-05
 
 ### Added
@@ -224,7 +239,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.2...v0.3.3

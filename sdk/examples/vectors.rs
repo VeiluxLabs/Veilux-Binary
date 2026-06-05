@@ -1,6 +1,3 @@
-//! Prints cross-language test vectors so the TypeScript SDK can assert
-//! byte-for-byte compatibility (signing bytes, command id, signature).
-
 use veilux_kernel::Command;
 use veilux_sdk::{builders, Hash, PartyIdentity, Visibility};
 
@@ -27,7 +24,6 @@ fn main() {
     let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
     println!("public_key(alice): {}", hex(&alice.public_key()));
 
-    // token create
     let create = builders::token_create(
         alice.party().clone(),
         Visibility::Public,
@@ -40,7 +36,6 @@ fn main() {
     );
     dump("token_create", &alice, create);
 
-    // token transfer (token id derived)
     let token_id = Hash::commit("token/id", &[b"alice", b"GLD", b"Gold Coin"]);
     let transfer = builders::token_transfer(
         alice.party().clone(),

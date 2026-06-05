@@ -1,4 +1,8 @@
-# VEILUX
+<p align="center">
+  <img src="https://raw.githubusercontent.com/VeiluxLabs/.github/main/VeiLux-labs.jpg" alt="VEILUX" width="100%">
+</p>
+
+<h1 align="center">VEILUX</h1>
 
 [![CI](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/ci.yml/badge.svg)](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/ci.yml)
 [![Release](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/release.yml/badge.svg)](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/release.yml)
@@ -13,7 +17,7 @@ VEILUX is built around three ideas:
 
 1. **A featherweight core.** The *Photon* kernel knows almost nothing. It defines the data shapes, one extension trait (`Prism`), a pipeline (`Cascade`), and a content-addressed state. That's it. Everything heavy is an add-on you compile in only if you need it. Release binaries are optimized for size (`opt-level = "z"`, LTO, stripped).
 
-2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Shipped Prisms: **AI** (+ optional Ollama), **Storage**, **Token** (ERC-20-like), **NFT** (ERC-721-like), **Contract** (PhotonVM), and **Bridge** (cross-chain to Cosmos/Solana/EVM). They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait.
+2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Nine ship today: **Token**, **NFT**, **Contract** (PhotonVM), **AI** (+ optional Ollama), **Storage**, **Bridge** (cross-chain), **Staking & Governance**, **Oracle**, and **Confidential Token**. They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait — no kernel fork.
 
 3. **Privacy by ledger (VeilLedger).** The *Veil* layer gives you one logically shared ledger where **no participant sees data they aren't a stakeholder of**. Every node agrees on the same Merkle root of *blinded commitments*, while contents are sealed per-party into encrypted **views** and stored in per-party **sub-ledgers**.
 
@@ -24,12 +28,20 @@ VEILUX is built around three ideas:
    featherweight · privacy-first · AI-native
 ```
 
-## Token
+## Native token
+
+The native token's name, symbol, decimals, and total supply are **chosen at
+genesis** (`--genesis spec.json`), so every network picks its own identity. The
+defaults are:
 
 | | |
 |---|---|
-| Ticker | `LUX` |
+| Name / Ticker | Veilux / `LUX` |
 | Subunit | `lumen` (1 LUX = 10¹⁸ lumen) |
+| Supply | set by genesis allocations |
+
+The native token powers **staking**, **governance voting weight**, **transaction
+fees**, and **block rewards**.
 
 ## What is VEILUX?
 
@@ -59,10 +71,11 @@ default.**
 | Layer | What it does |
 |-------|--------------|
 | **Photon** (kernel) | Data shapes, the `Prism` trait, the cascade pipeline, and a BLAKE3 content-addressed state. Deliberately minimal. |
-| **Aurora** (consensus) | Stake-weighted Byzantine fault-tolerant consensus: 2/3+ finality, deterministic proposer selection, quorum-synchronized proposer failover, equivocation detection. |
+| **Aurora** (consensus) | Stake-weighted Byzantine fault-tolerant consensus: 2/3+ finality, deterministic proposer selection, quorum-synchronized proposer failover, and equivocation detection that auto-submits slashing evidence. |
 | **Veil** (privacy) | One logically shared ledger; each event is sealed per-party with ChaCha20-Poly1305, while all nodes agree on a Merkle root of blinded commitments. Includes scoped selective disclosure for auditors/regulators. |
+| **Economics** | Configurable native token at genesis, gas-priced transaction fees split between a burn and a proposer reward, staking with delegation, and on-chain stake-weighted governance. |
 | **Store** | Persistent block log + atomic state snapshots; the chain reloads on restart. |
-| **Network** | Lightweight TCP gossip for proposals, votes, blocks, and sync. |
+| **Network** | Lightweight TCP gossip for proposals, votes, blocks, and sync — with an optional authenticated handshake (signed peer identity + IP allowlist). |
 
 ### Features
 
@@ -70,12 +83,15 @@ default.**
 
 | Prism | Capability |
 |-------|------------|
-| **Token** | Fungible tokens (ERC-20-style): transfer, approve, mint, burn |
+| **Token** | Fungible tokens (ERC-20-style): transfer, approve, mint, burn; plus the native token + fee helpers |
 | **NFT** | Non-fungible tokens & collections (ERC-721-style) |
 | **Contract** | PhotonVM — a deterministic stack-based smart-contract VM |
 | **AI** | On-chain model registry + deterministic inference, with optional local LLM execution via Ollama |
 | **Storage** | Content-addressed blob storage with reference-counted pinning |
 | **Bridge** | Guardian-attested cross-chain transfers to Cosmos, Solana, and EVM chains |
+| **Staking & Governance** | Bond/delegate native LUX, stake-weighted proposals & voting, and equivocation **slashing** |
+| **Oracle** | Quorum-attested external data feeds (prices, AI outputs, off-chain facts) |
+| **Confidential** | Confidential token with hidden balances (note commitments) + selective auditor disclosure |
 
 **Developer experience:**
 
@@ -97,10 +113,14 @@ default.**
    inference — not a bolt-on. It can also drive local LLMs through Ollama.
 2. **Banking-grade privacy.** The VeilLedger model keeps data confidential from
    competitors while remaining provably transparent to authorized regulators,
-   enforced by cryptography rather than policy.
+   enforced by cryptography rather than policy. The Confidential Token Prism even
+   hides balances and amounts from public observers.
 3. **Featherweight & modular.** A tiny core plus opt-in Prisms means stronger
    security, smaller binaries, and long-term maintainability.
-4. **Cross-chain by design.** The Bridge Prism connects VEILUX to other
+4. **Real economics & security.** Stake-weighted BFT with delegation,
+   governance, gas-priced fees (burn + proposer reward), automatic slashing of
+   equivocating validators, and an authenticated peer transport.
+5. **Cross-chain by design.** The Bridge Prism connects VEILUX to other
    ecosystems out of the box.
 
 ### Who it's for
@@ -112,9 +132,14 @@ default.**
 
 ### Status
 
-VEILUX is a fully functional chain: live multi-node BFT consensus, persistence,
-networking, privacy, six Prisms, and JSON-RPC + WebSocket APIs with Rust and
-TypeScript SDKs — all covered by tests and continuous integration.
+VEILUX is a fully functional chain: live multi-node BFT consensus with proposer
+failover and auto-slashing, persistence, an authenticated gossip network,
+privacy, nine Prisms, configurable token economics with fees and staking, and
+JSON-RPC + WebSocket APIs with Rust and TypeScript SDKs — all covered by tests
+and continuous integration. It has not yet run a public mainnet; treat it as a
+testnet-grade core. See `docs/security.md` for the honest threat model and
+remaining hardening items (transport encryption, ZK-blind confidential transfers,
+HSM key management).
 
 ## Workspace layout
 
@@ -142,11 +167,15 @@ veilux/
 ├── prisms/
 │   ├── ai/            # AI Prism: model registry + inference (+ optional Ollama)
 │   ├── storage/       # Storage Prism: content-addressed blobs + pinning
-│   ├── token/         # Token Prism: fungible tokens (ERC-20-like)
+│   ├── token/         # Token Prism: fungible + native token, fees, balances
 │   ├── nft/           # NFT Prism: non-fungible tokens (ERC-721-like)
 │   ├── contract/      # Contract Prism: PhotonVM smart contracts
-│   └── bridge/        # Bridge Prism: cross-chain transfers (Cosmos, Solana, EVM)
+│   ├── bridge/        # Bridge Prism: cross-chain transfers (Cosmos, Solana, EVM)
+│   ├── staking/       # Staking & Governance Prism: stake, delegate, vote, slash
+│   ├── oracle/        # Oracle Prism: quorum-attested external data feeds
+│   └── confidential/  # Confidential Token Prism: hidden balances + disclosure
 └── node/              # assembles kernel + veil + consensus + store + prisms
+                       #   (genesis token config, fee engine, auto-slash watcher)
 ```
 
 ## The cascade
@@ -172,6 +201,55 @@ submit(ai.infer) ─► AI Prism ─► InferenceCommitted event
 
 Result: a non-stakeholder can prove a transaction *happened* without learning
 *what* happened.
+
+## Token economics, staking & governance
+
+VEILUX ships a complete economic layer on top of the native token:
+
+- **Configurable genesis.** A JSON spec sets the token name, symbol, decimals,
+  initial allocations (= total supply), and the fee policy. Seeding is
+  deterministic, so every validator with the same spec converges on identical
+  state.
+
+  ```jsonc
+  {
+    "token_name": "Veilux", "token_symbol": "LUX", "token_decimals": 18,
+    "treasury": "treasury",
+    "allocations": [
+      { "party": "treasury",   "amount": 700000000 },
+      { "party": "validators", "amount": 200000000 },
+      { "party": "ecosystem",  "amount": 100000000 }
+    ],
+    "fee_price_per_gas": 1, "fee_burn_bps": 5000
+  }
+  ```
+
+- **Transaction fees.** When enabled, each command pays `fee = gas × price` in
+  the native token. A configurable fraction is **burned** (deflationary) and the
+  rest rewards the **block proposer** — the anti-spam and validator-incentive
+  backbone. The charge is deterministic and capped at the payer's balance.
+
+- **Staking & delegation.** Bond native LUX as validator stake or delegate it to
+  another validator; voting power = self-bonded + delegated.
+
+- **Governance.** Bonded stakers open proposals; everyone votes with
+  stake-weighted power; proposals finalize after a voting period.
+
+- **Slashing.** If a validator double-signs, any node that observes the two
+  conflicting signed votes automatically submits **equivocation evidence**, and
+  the offender's self-stake is slashed (burned). Forged evidence is rejected.
+
+Run a chain with economics enabled:
+
+```bash
+veilux serve --genesis genesis.example.json
+veilux validator --name v1 --seed v1 --listen 127.0.0.1:30421 \
+  --peer v2:v2 --peer v3:v3 --secure --allow-ip 127.0.0.1 \
+  --genesis genesis.example.json
+```
+
+See [`docs/add-ons.md`](docs/add-ons.md) for the Staking, Oracle, and
+Confidential Prism specs, and the genesis/fee reference.
 
 ## Download (prebuilt binaries)
 
@@ -232,8 +310,8 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 |-----|---------------|
 | `docs/INSTALL.md` | Install, build, run, troubleshoot, CI/CD, Docker |
 | `docs/architecture.md` | System design, cascade, state model |
-| `docs/add-ons.md` | Per-Prism specs (AI, Storage, Token, NFT, Contract) + how to build your own |
-| `docs/consensus-networking.md` | Aurora BFT consensus, persistence, and gossip transport |
+| `docs/add-ons.md` | Per-Prism specs (all nine) + native token, fees & genesis + how to build your own |
+| `docs/consensus-networking.md` | Aurora BFT consensus, authenticated transport, persistence, and gossip |
 | `docs/rpc-sdk.md` | JSON-RPC API + Rust & TypeScript SDKs for building applications |
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
 | `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
@@ -315,7 +393,6 @@ at your option.
 
 ## Contact
 
-- Telegram: [@Winnodexx](https://t.me/Winnodexx)
 - Email: [nathan@winnode.xyz](mailto:nathan@winnode.xyz)
 
 ## Author

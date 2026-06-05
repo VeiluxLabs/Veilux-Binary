@@ -13,9 +13,6 @@ pub(crate) mod u128_dec {
     }
 }
 
-/// Foreign chains VEILUX can bridge to/from. The wire format for each is
-/// abstracted: a foreign address is just opaque bytes (hex), interpreted by the
-/// relayers for that chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ForeignChain {
@@ -36,16 +33,11 @@ impl ForeignChain {
     }
 }
 
-/// A registered bridge connection to a foreign chain: its guardian (relayer)
-/// set and the quorum needed to mint inbound transfers.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BridgeConfig {
     pub chain: ForeignChain,
-    /// Guardian Ed25519 public keys (32 bytes each, hex-encoded).
     pub guardians: Vec<String>,
-    /// Number of guardian signatures required to accept an inbound transfer.
     pub quorum: usize,
-    /// Admin party allowed to update this config.
     pub admin: PartyId,
 }
 
@@ -55,22 +47,18 @@ impl BridgeConfig {
     }
 }
 
-/// An outbound transfer: VEILUX -> foreign chain. Locked here, minted there.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OutboundTransfer {
     pub sequence: u64,
     pub chain: ForeignChain,
     pub sender: PartyId,
-    /// Foreign recipient address (hex/opaque).
     pub recipient: String,
-    /// Token id being bridged (VEILUX-side).
     pub token_id: Hash,
     #[serde(with = "u128_dec")]
     pub amount: u128,
 }
 
 impl OutboundTransfer {
-    /// Canonical bytes guardians observe and sign on the foreign side.
     pub fn digest(&self) -> Hash {
         Hash::commit(
             "bridge/outbound",
@@ -86,25 +74,18 @@ impl OutboundTransfer {
     }
 }
 
-/// A guardian-attested inbound transfer: foreign chain -> VEILUX.
-/// Guardians sign the `digest()` off-chain; the bridge verifies quorum.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InboundTransfer {
     pub chain: ForeignChain,
-    /// Monotonic per-chain sequence (anti-replay).
     pub sequence: u64,
-    /// Foreign sender address (hex/opaque).
     pub foreign_sender: String,
-    /// VEILUX recipient.
     pub recipient: PartyId,
-    /// Wrapped token id to credit on VEILUX.
     pub token_id: Hash,
     #[serde(with = "u128_dec")]
     pub amount: u128,
 }
 
 impl InboundTransfer {
-    /// The message guardians sign to attest this transfer happened abroad.
     pub fn digest(&self) -> Hash {
         Hash::commit(
             "bridge/inbound",
@@ -120,11 +101,8 @@ impl InboundTransfer {
     }
 }
 
-/// A single guardian signature over an inbound transfer digest.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GuardianSignature {
-    /// Guardian public key (32 bytes, hex).
     pub public_key: String,
-    /// Ed25519 signature over the transfer digest (64 bytes, hex).
     pub signature: String,
 }

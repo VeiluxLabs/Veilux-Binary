@@ -12,11 +12,6 @@ use veilux_rpc::{method, server::RpcServer};
 
 use crate::node::Node;
 
-/// Runs the JSON-RPC server over a shared, mutable node. This is the developer
-/// entry point ("dev node"): submitted commands are applied and a block is
-/// produced immediately, so clients get fast, deterministic feedback — similar
-/// to a local Ethereum dev chain. Committed blocks are pushed to the WebSocket
-/// `hub` for real-time subscribers.
 pub async fn serve_rpc(
     node: Arc<Mutex<Node>>,
     listen_addr: String,
@@ -125,7 +120,6 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
             let mut n = node.lock().await;
             match n.submit_signed(params.command) {
                 Ok(()) => {
-                    // Dev-node: produce a block immediately for fast feedback.
                     let _ = n.produce_block();
                     let mempool_len = n.mempool.len();
                     let head = n.head();
@@ -297,7 +291,6 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
                     },
                 );
             }
-            // Compare the submitted bytecode against the deployed bytecode.
             let submitted = vr.bytecode_hex.trim_start_matches("0x").to_lowercase();
             let onchain = code.bytecode_hex.trim_start_matches("0x").to_lowercase();
             if submitted != onchain {
@@ -357,11 +350,6 @@ fn block_view(b: &veilux_kernel::Block) -> BlockView {
 }
 
 fn event_view(height: u64, ev: &veilux_kernel::Event) -> EventView {
-    // VeilLedger privacy: a public block explorer must NOT reveal the contents
-    // of private events. For non-public events we expose only the commitment
-    // (proof the event happened and is in the Merkle root) and the stakeholder
-    // count — never the payload. Stakeholders read contents from their own
-    // sub-ledger; auditors via selective disclosure.
     let (visibility, redacted, stakeholders) = match &ev.visibility {
         veilux_kernel::Visibility::Public => ("public".to_string(), false, 0usize),
         veilux_kernel::Visibility::Parties(p) => ("parties".to_string(), true, p.len()),
@@ -450,14 +438,12 @@ fn parse_submit(req: &RpcRequest) -> Option<veilux_rpc::types::SubmitParams> {
     serde_json::from_value(req.params.clone()).ok()
 }
 
-/// Read a contract's deployed bytecode + verification status from state.
 fn read_contract_code(n: &Node, address: &str) -> ContractCode {
     let key = format!("contract/code/{address}");
     let meta: Option<serde_json::Value> = n.state.get_json(&key).ok().flatten();
     let verified = n.state.contains(&format!("contract/verified/{address}"));
     match meta {
         Some(m) => {
-            // ContractMeta.code is a JSON array of bytes.
             let code: Vec<u8> = m
                 .get("code")
                 .and_then(|c| c.as_array())

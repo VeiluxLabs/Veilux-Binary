@@ -3,11 +3,6 @@ use std::collections::{HashMap, HashSet};
 use veilux_consensus::ValidatorSet;
 use veilux_kernel::PartyId;
 
-/// Coordinates BFT view changes so independent local timers cannot desync the
-/// network. A node only adopts a higher view once it has collected view-change
-/// votes from **2/3+ of stake** for that (height, view) — exactly the same
-/// quorum rule as block finality. This guarantees all honest nodes converge on
-/// the same proposer even when leaders fail.
 pub struct ViewCoordinator {
     height: u64,
     votes: HashMap<u32, HashSet<PartyId>>,
@@ -26,8 +21,6 @@ impl ViewCoordinator {
         self.votes.clear();
     }
 
-    /// Record a view-change vote. Returns the highest view that has reached
-    /// quorum (if any), so the caller can jump straight to it.
     pub fn record(
         &mut self,
         height: u64,
@@ -45,7 +38,6 @@ impl ViewCoordinator {
         self.quorum_view(vset)
     }
 
-    /// The highest view that has 2/3+ stake backing it.
     fn quorum_view(&self, vset: &ValidatorSet) -> Option<u32> {
         let quorum = vset.quorum_threshold();
         self.votes

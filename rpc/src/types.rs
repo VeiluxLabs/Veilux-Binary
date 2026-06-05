@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use veilux_kernel::{Hash, SignedCommand};
 
-/// A JSON-RPC 2.0 request.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RpcRequest {
     pub jsonrpc: String,
@@ -22,7 +21,6 @@ impl RpcRequest {
     }
 }
 
-/// A JSON-RPC 2.0 response.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RpcResponse {
     pub jsonrpc: String,
@@ -62,18 +60,14 @@ pub struct RpcError {
     pub message: String,
 }
 
-/// Standard JSON-RPC error codes.
 pub mod codes {
     pub const PARSE_ERROR: i64 = -32700;
     pub const INVALID_REQUEST: i64 = -32600;
     pub const METHOD_NOT_FOUND: i64 = -32601;
     pub const INVALID_PARAMS: i64 = -32602;
     pub const INTERNAL_ERROR: i64 = -32603;
-    /// Application-level: command rejected by the node.
     pub const COMMAND_REJECTED: i64 = -32000;
 }
-
-// ---- Method parameter / result payloads ----
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
@@ -120,7 +114,6 @@ pub struct StateQuery {
 pub struct StateResult {
     pub key: String,
     pub found: bool,
-    /// Hex-encoded value bytes (empty when not found).
     pub value_hex: String,
 }
 
@@ -129,7 +122,6 @@ pub struct EstimateResult {
     pub cost: u64,
 }
 
-/// Real-time notification pushed over WebSocket when a block is committed.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockNotification {
     #[serde(rename = "type")]
@@ -163,14 +155,10 @@ impl BlockNotification {
     }
 }
 
-/// Helper to hex-encode a hash for the wire.
 pub fn hash_hex(h: &Hash) -> String {
     h.to_hex()
 }
 
-// ---- Explorer namespace types ----
-
-/// Chain-wide statistics for dashboards.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChainStats {
     pub height: u64,
@@ -180,32 +168,22 @@ pub struct ChainStats {
     pub head_hash: String,
     pub state_root: String,
     pub state_entries: usize,
-    /// Event counts grouped by prism name.
     pub events_by_prism: std::collections::BTreeMap<String, u64>,
 }
 
-/// A decoded event entry surfaced by the explorer.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventView {
     pub block_height: u64,
     pub prism: String,
     pub commitment: String,
     pub source_command: String,
-    /// Visibility shape: "public" or "parties".
     pub visibility: String,
-    /// True when the payload is hidden because the event is private. Public
-    /// observers only ever see the commitment for private events — never the
-    /// contents, which honors the VeilLedger privacy model.
     pub redacted: bool,
-    /// Number of stakeholders (for private events; 0 for public).
     pub stakeholders: usize,
-    /// JSON payload if public and it decodes as JSON, else null.
     pub payload_json: Option<serde_json::Value>,
-    /// Hex bytes if public and non-JSON, else null. Always null when redacted.
     pub payload_hex: Option<String>,
 }
 
-/// Result of locating a command across the chain.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CommandLocation {
     pub found: bool,
@@ -214,18 +192,15 @@ pub struct CommandLocation {
     pub block_hash: Option<String>,
     pub prism: Option<String>,
     pub submitter: Option<String>,
-    /// Events produced by this command.
     pub events: Vec<EventView>,
 }
 
-/// A single state entry (key + hex value) for prefix listings.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StateEntry {
     pub key: String,
     pub value_hex: String,
 }
 
-/// Paginated list of state entries under a prefix.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StatePrefixResult {
     pub prefix: String,
@@ -233,38 +208,28 @@ pub struct StatePrefixResult {
     pub entries: Vec<StateEntry>,
 }
 
-// ---- Contract verification types ----
-
-/// The deployed bytecode of a contract.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ContractCode {
     pub address: String,
     pub found: bool,
     pub deployer: Option<String>,
-    /// Deployed bytecode, hex-encoded.
     pub bytecode_hex: String,
     pub code_size: usize,
-    /// BLAKE3 hash of the deployed bytecode.
     pub code_hash: String,
     pub verified: bool,
 }
 
-/// Request to verify a contract's source against its on-chain bytecode.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerifyRequest {
     pub address: String,
     pub name: String,
-    /// Human-readable source (PhotonVM assembly or a higher-level note).
     pub source: String,
-    /// The bytecode the source compiles to, hex-encoded — must match on-chain.
     pub bytecode_hex: String,
     pub compiler: String,
-    /// Optional ABI / opcode interface description (free-form JSON string).
     #[serde(default)]
     pub abi: String,
 }
 
-/// Stored verification record for a contract.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationRecord {
     pub address: String,
@@ -276,7 +241,6 @@ pub struct VerificationRecord {
     pub verified_at_height: u64,
 }
 
-/// Result of a verification attempt.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerifyResult {
     pub verified: bool,

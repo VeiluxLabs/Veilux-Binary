@@ -25,9 +25,6 @@ pub struct NetConfig {
     pub node_id: String,
     pub listen_addr: String,
     pub bootstrap: Vec<String>,
-    /// Optional transport authentication. When `Some`, every peer connection
-    /// must pass a mutual signed handshake (and IP allowlist, if set) before
-    /// any gossip is exchanged. When `None`, the transport is open (dev mode).
     pub auth: Option<AuthConfig>,
 }
 
@@ -117,8 +114,6 @@ impl Network {
         info!(addr = %self.cfg.listen_addr, node = %self.cfg.node_id, mode = auth_mode, "listening for peers");
         loop {
             let (stream, addr) = listener.accept().await?;
-            // IP allowlist is enforced on inbound connections only: the owner
-            // decides which source addresses may even attempt a handshake.
             if let Some(auth) = &self.cfg.auth {
                 if !auth.allows_ip(&addr.ip()) {
                     warn!(%addr, "rejected inbound peer: ip not on allowlist");
@@ -161,9 +156,6 @@ impl Network {
         let mut reader = BufReader::new(read_half);
         let mut write_half = write_half;
 
-        // Mutual signed handshake: prove both ends hold a registered validator
-        // key before any consensus traffic is accepted. On failure the socket
-        // is dropped without ever entering the gossip loop.
         if let Some(auth) = &self.cfg.auth {
             match auth::perform_handshake(auth, &mut reader, &mut write_half).await {
                 Ok(peer) => {

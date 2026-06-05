@@ -1,29 +1,3 @@
-//! # VEILUX SDK
-//!
-//! A small, ergonomic Rust client for talking to a VEILUX node over JSON-RPC.
-//! It bundles the three things an application developer needs:
-//!
-//! 1. **Identity** — generate/load an Ed25519 [`PartyIdentity`] and sign commands.
-//! 2. **Builders** — construct commands for every shipped Prism (token, NFT,
-//!    contract, storage, AI) through one import.
-//! 3. **Client** — submit signed commands and query the chain.
-//!
-//! ```no_run
-//! use veilux_sdk::{Client, PartyIdentity, builders, Visibility};
-//!
-//! let client = Client::new("http://127.0.0.1:8645");
-//! let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
-//!
-//! let info = client.node_info()?;
-//! println!("height = {}", info.height);
-//!
-//! let cmd = builders::token_create(alice.party().clone(), Visibility::Public, 0,
-//!     "Gold", "GLD", 18, 1_000_000, true);
-//! let res = client.submit(&alice.sign(cmd))?;
-//! println!("accepted: {}", res.accepted);
-//! # Ok::<(), veilux_sdk::SdkError>(())
-//! ```
-
 use serde_json::json;
 
 pub use veilux_kernel::{Command, Hash, PartyId, SignedCommand, Visibility};
@@ -47,7 +21,6 @@ pub enum SdkError {
     MissingResult,
 }
 
-/// A synchronous VEILUX RPC client.
 pub struct Client {
     endpoint: String,
     next_id: std::cell::Cell<u64>,
@@ -91,54 +64,42 @@ impl Client {
         serde_json::from_value(result).map_err(|e| SdkError::Decode(e.to_string()))
     }
 
-    /// Node metadata (network, height, installed prisms).
     pub fn node_info(&self) -> Result<NodeInfo, SdkError> {
         self.call(method::NODE_INFO, json!({}))
     }
 
-    /// Current chain height.
     pub fn block_number(&self) -> Result<u64, SdkError> {
         self.call(method::BLOCK_NUMBER, json!({}))
     }
 
-    /// Fetch a block by height.
     pub fn block_by_number(&self, height: u64) -> Result<BlockView, SdkError> {
         self.call(method::GET_BLOCK_BY_NUMBER, json!({ "height": height }))
     }
 
-    /// Read a raw state value by key (hex-encoded bytes).
     pub fn get_state(&self, key: &str) -> Result<StateResult, SdkError> {
         self.call(method::GET_STATE, json!({ "key": key }))
     }
 
-    /// Estimate the cost of a signed command without submitting it.
     pub fn estimate(&self, command: &SignedCommand) -> Result<EstimateResult, SdkError> {
         self.call(method::ESTIMATE, json!({ "command": command }))
     }
 
-    /// Submit a signed command to the node's mempool.
     pub fn submit(&self, command: &SignedCommand) -> Result<SubmitResult, SdkError> {
         self.call(method::SUBMIT, json!({ "command": command }))
     }
 
-    // ---- Explorer queries ----
-
-    /// Chain-wide statistics (height, totals, per-prism event breakdown).
     pub fn explorer_stats(&self) -> Result<ChainStats, SdkError> {
         self.call(method::EXPLORER_STATS, json!({}))
     }
 
-    /// The most recent blocks, newest first.
     pub fn explorer_recent_blocks(&self, limit: u64) -> Result<Vec<BlockView>, SdkError> {
         self.call(method::EXPLORER_RECENT_BLOCKS, json!({ "limit": limit }))
     }
 
-    /// Look up a block by its hash.
     pub fn explorer_block_by_hash(&self, hash: &str) -> Result<BlockView, SdkError> {
         self.call(method::EXPLORER_BLOCK_BY_HASH, json!({ "hash": hash }))
     }
 
-    /// Locate a command by id and return its block + produced events.
     pub fn explorer_search_command(&self, command_id: &str) -> Result<CommandLocation, SdkError> {
         self.call(
             method::EXPLORER_SEARCH_COMMAND,
@@ -146,7 +107,6 @@ impl Client {
         )
     }
 
-    /// Recent events emitted by a given Prism.
     pub fn explorer_list_by_prism(
         &self,
         prism: &str,
@@ -158,7 +118,6 @@ impl Client {
         )
     }
 
-    /// List state entries under a key prefix (e.g. "token/meta/").
     pub fn explorer_state_prefix(
         &self,
         prefix: &str,
@@ -170,12 +129,10 @@ impl Client {
         )
     }
 
-    /// Fetch a contract's deployed bytecode + verification status.
     pub fn contract_get_code(&self, address: &str) -> Result<ContractCode, SdkError> {
         self.call(method::CONTRACT_GET_CODE, json!({ "address": address }))
     }
 
-    /// Verify a contract's source against its on-chain bytecode.
     pub fn contract_verify(&self, request: &VerifyRequest) -> Result<VerifyResult, SdkError> {
         self.call(
             method::CONTRACT_VERIFY,
@@ -183,7 +140,6 @@ impl Client {
         )
     }
 
-    /// Get a stored verification record, if any.
     pub fn contract_get_verification(&self, address: &str) -> Result<serde_json::Value, SdkError> {
         self.call(
             method::CONTRACT_GET_VERIFICATION,
@@ -192,8 +148,6 @@ impl Client {
     }
 }
 
-/// Command builders for every shipped Prism, re-exported under one namespace so
-/// applications need a single import.
 pub mod builders {
     pub use prism_ai::{infer_command as ai_infer, register_command as ai_register};
     pub use prism_bridge::{

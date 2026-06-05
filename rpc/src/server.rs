@@ -7,10 +7,6 @@ use tracing::{debug, info, warn};
 
 use crate::types::{codes, RpcRequest, RpcResponse};
 
-/// A minimal HTTP/1.1 JSON-RPC server with no heavyweight web framework.
-/// It reads a single request, dispatches it to the handler, and writes one
-/// JSON response. This keeps the dependency surface tiny, in line with the
-/// Photon philosophy.
 pub struct RpcServer {
     listen_addr: String,
 }
@@ -22,8 +18,6 @@ impl RpcServer {
         }
     }
 
-    /// Serve until the process ends. `handler` maps an [`RpcRequest`] to an
-    /// [`RpcResponse`]; it is shared across connections via `Arc`.
     pub async fn serve<H, Fut>(self, handler: H) -> std::io::Result<()>
     where
         H: Fn(RpcRequest) -> Fut + Send + Sync + 'static,
@@ -56,7 +50,6 @@ where
     let mut buf = Vec::with_capacity(4096);
     let mut tmp = [0u8; 4096];
 
-    // Read until we have headers + full body (Content-Length).
     let body_start;
     let content_length;
     loop {
@@ -91,7 +84,6 @@ where
         buf.extend_from_slice(&tmp[..n]);
     }
 
-    // Answer CORS preflight so browser-based explorers/dApps can call us.
     let request_line = std::str::from_utf8(&buf[..body_start.min(buf.len())])
         .unwrap_or("")
         .lines()

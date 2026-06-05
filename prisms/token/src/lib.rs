@@ -21,9 +21,6 @@ const META_PREFIX: &str = "token/meta/";
 const BAL_PREFIX: &str = "token/bal/";
 const ALLOW_PREFIX: &str = "token/allow/";
 
-/// Deterministic, well-known id of the chain's native token (LUX). The genesis
-/// process seeds this token's metadata and initial allocations; staking, fees,
-/// and rewards all operate on it.
 pub fn native_token_id() -> Hash {
     Hash::commit("veilux/native-token", &[])
 }
@@ -493,7 +490,6 @@ pub fn balance_of(state: &StateTree, token_id: &Hash, who: &PartyId) -> u128 {
     TokenPrism::balance(state, token_id, who)
 }
 
-/// Read a token's metadata (None if it does not exist).
 pub fn token_meta(state: &StateTree, token_id: &Hash) -> Option<TokenMeta> {
     state
         .get_json::<TokenMeta>(&TokenPrism::meta_key(token_id))
@@ -501,9 +497,6 @@ pub fn token_meta(state: &StateTree, token_id: &Hash) -> Option<TokenMeta> {
         .flatten()
 }
 
-/// Credit `amount` to `who` for `token_id` and grow total supply. For use by
-/// trusted in-process modules (genesis, staking rewards, fee distribution) — not
-/// reachable from untrusted command input.
 pub fn credit(
     state: &mut StateTree,
     token_id: &Hash,
@@ -527,9 +520,6 @@ pub fn credit(
     Ok(())
 }
 
-/// Debit `amount` from `who` for `token_id` (does not touch total supply; the
-/// value is assumed to move elsewhere, e.g. a staking escrow). Returns an error
-/// if the balance is insufficient.
 pub fn debit(
     state: &mut StateTree,
     token_id: &Hash,
@@ -543,7 +533,6 @@ pub fn debit(
     TokenPrism::set_balance(state, token_id, who, bal - amount)
 }
 
-/// Move `amount` of `token_id` from `from` to `to` atomically.
 pub fn move_balance(
     state: &mut StateTree,
     token_id: &Hash,
@@ -563,8 +552,6 @@ pub fn move_balance(
     )
 }
 
-/// Burn `amount` of `token_id` from `who`, reducing both their balance and the
-/// token's total supply. Used by the fee burn and by deflationary mechanisms.
 pub fn burn_from(
     state: &mut StateTree,
     token_id: &Hash,
@@ -581,7 +568,6 @@ pub fn burn_from(
     Ok(())
 }
 
-/// Outcome of charging a transaction fee.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FeeOutcome {
     pub charged: u128,
@@ -589,11 +575,6 @@ pub struct FeeOutcome {
     pub rewarded: u128,
 }
 
-/// Charge a transaction fee from `payer` for `token_id`: a `burn_bps` fraction
-/// is burned (supply down) and the remainder is paid to `proposer` as a block
-/// reward. The charge is capped at the payer's balance (so re-execution never
-/// fails on an underfunded account — deterministic for every node). Value is
-/// conserved: `charged = burned + rewarded`.
 pub fn collect_fee(
     state: &mut StateTree,
     token_id: &Hash,
@@ -609,9 +590,7 @@ pub fn collect_fee(
     }
     let burned = charged * (burn_bps.min(10_000) as u128) / 10_000;
     let rewarded = charged - burned;
-    // Remove the full charge from the payer.
     TokenPrism::set_balance(state, token_id, payer, bal - charged)?;
-    // Pay the proposer the reward (pure transfer, supply unchanged).
     if rewarded > 0 {
         let pbal = TokenPrism::balance(state, token_id, proposer);
         TokenPrism::set_balance(
@@ -622,7 +601,6 @@ pub fn collect_fee(
                 .ok_or_else(|| PrismError::Internal("reward overflow".into()))?,
         )?;
     }
-    // Burn the rest (supply down).
     if burned > 0 {
         if let Some(mut meta) = token_meta(state, token_id) {
             meta.total_supply = meta.total_supply.saturating_sub(burned);
@@ -638,8 +616,6 @@ pub fn collect_fee(
     })
 }
 
-/// Seed the native token's metadata and initial allocations at genesis. Safe to
-/// call once on an empty chain; does nothing if the native token already exists.
 pub fn seed_native_token(
     state: &mut StateTree,
     name: &str,
@@ -813,7 +789,6 @@ mod tests {
         assert_eq!(id, native_token_id());
         assert_eq!(token_meta(&s, &id).unwrap().total_supply, 1000);
         assert_eq!(balance_of(&s, &id, &PartyId::new("alice")), 300);
-        // idempotent: a second seed is a no-op
         seed_native_token(&mut s, "X", "X", 0, &PartyId::new("t"), &[]).unwrap();
         assert_eq!(token_meta(&s, &id).unwrap().total_supply, 1000);
     }
@@ -832,7 +807,6 @@ mod tests {
         .unwrap();
         let supply_before = token_meta(&s, &id).unwrap().total_supply;
 
-        // 1000 fee, 30% burn -> 300 burned, 700 to proposer
         let out = collect_fee(
             &mut s,
             &id,
@@ -847,7 +821,6 @@ mod tests {
         assert_eq!(out.rewarded, 700);
         assert_eq!(balance_of(&s, &id, &PartyId::new("alice")), 9_000);
         assert_eq!(balance_of(&s, &id, &PartyId::new("v1")), 700);
-        // supply dropped by exactly the burned amount
         assert_eq!(
             token_meta(&s, &id).unwrap().total_supply,
             supply_before - 300
@@ -866,7 +839,6 @@ mod tests {
             &[(PartyId::new("poor"), 50)],
         )
         .unwrap();
-        // fee exceeds balance: charge only what's available, never error
         let out = collect_fee(
             &mut s,
             &id,

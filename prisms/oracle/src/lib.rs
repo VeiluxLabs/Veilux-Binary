@@ -8,27 +8,20 @@ use veilux_veil::verify_bytes;
 const FEED_PREFIX: &str = "oracle/feed/";
 const VALUE_PREFIX: &str = "oracle/value/";
 
-/// A registered data feed: a named oracle whose updates require a quorum of
-/// signatures from a fixed reporter set. Trust is in the reporter quorum, not
-/// pure math — documented honestly (same model as the Bridge guardians).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Feed {
     pub feed_id: Hash,
     pub name: String,
     pub admin: PartyId,
-    /// Hex-encoded Ed25519 public keys of authorized reporters.
     pub reporters: Vec<String>,
     pub quorum: u32,
-    /// Monotonic round; an update must strictly advance it (anti-replay).
     pub round: u64,
 }
 
-/// The latest accepted value of a feed.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FeedValue {
     pub feed_id: Hash,
     pub round: u64,
-    /// Opaque value bytes (e.g. a fixed-point price, a JSON blob, a model hash).
     pub value: Vec<u8>,
     pub reporters: Vec<String>,
 }
@@ -42,14 +35,11 @@ pub struct ReporterSig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum OracleCommand {
-    /// Register a feed with its reporter set and signature quorum.
     RegisterFeed {
         name: String,
         reporters: Vec<String>,
         quorum: u32,
     },
-    /// Submit a new value; accepted only if a quorum of reporters signed the
-    /// digest of (feed_id, round, value).
     Report {
         feed_id: Hash,
         round: u64,
@@ -74,7 +64,6 @@ pub enum OracleEvent {
     },
 }
 
-/// Canonical digest reporters sign: domain-separated over feed/round/value.
 pub fn report_digest(feed_id: &Hash, round: u64, value: &[u8]) -> Vec<u8> {
     let mut m = Vec::with_capacity(64 + value.len());
     m.extend_from_slice(b"veilux/oracle/report/v1");
@@ -249,7 +238,6 @@ impl Prism for OraclePrism {
     }
 }
 
-/// Read the latest accepted value of a feed.
 pub fn latest_value(state: &StateTree, feed_id: &Hash) -> Option<FeedValue> {
     state
         .get_json::<FeedValue>(&OraclePrism::value_key(feed_id))
@@ -395,8 +383,6 @@ mod tests {
         let outsider = reporter(9);
         let feed = register(&p, &mut s, &[&r1, &r2], 2);
 
-        // Only r1 + an outsider sign: outsider is not in the reporter set, so
-        // the quorum of 2 is not met.
         let cmd = report_cmd(feed, 1, vec![7], &[&r1, &outsider]);
         assert!(p.handle(&cmd, &mut s).is_err());
     }

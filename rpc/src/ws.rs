@@ -1,11 +1,3 @@
-//! Minimal WebSocket (RFC 6455) server for real-time subscriptions.
-//!
-//! Featherweight by design: just enough of the protocol to do the opening
-//! handshake and write text frames to subscribers. The node pushes JSON event
-//! notifications (new blocks, etc.) to every connected client. We only need to
-//! *send* server -> client, plus respond to ping/close, so the frame logic is
-//! intentionally small.
-
 use std::sync::Arc;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -15,8 +7,6 @@ use tracing::{debug, info, warn};
 
 const WS_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/// A WebSocket subscription hub. The node publishes JSON strings; every
-/// connected client receives them as text frames.
 pub struct WsHub {
     tx: broadcast::Sender<String>,
 }
@@ -27,12 +17,10 @@ impl WsHub {
         Arc::new(WsHub { tx })
     }
 
-    /// Publish a notification to all subscribers.
     pub fn publish(&self, json: String) {
         let _ = self.tx.send(json);
     }
 
-    /// Serve WebSocket connections on `listen_addr` until the process ends.
     pub async fn serve(self: Arc<Self>, listen_addr: String) -> std::io::Result<()> {
         let listener = TcpListener::bind(&listen_addr).await?;
         info!(addr = %listen_addr, "WebSocket subscription server listening");
@@ -48,7 +36,6 @@ impl WsHub {
     }
 
     async fn handle(self: Arc<Self>, mut stream: tokio::net::TcpStream) -> std::io::Result<()> {
-        // --- Opening handshake: read HTTP request, find Sec-WebSocket-Key ---
         let mut buf = Vec::with_capacity(2048);
         let mut tmp = [0u8; 1024];
         loop {
@@ -79,10 +66,8 @@ impl WsHub {
         );
         stream.write_all(response.as_bytes()).await?;
 
-        // Send a hello frame so clients know they're subscribed.
         write_text_frame(&mut stream, r#"{"type":"subscribed"}"#).await?;
 
-        // --- Push loop: forward published notifications as text frames ---
         let mut rx = self.tx.subscribe();
         loop {
             match rx.recv().await {
@@ -126,11 +111,10 @@ fn compute_accept(key: &str) -> String {
     base64_encode(&hasher.digest().bytes())
 }
 
-/// Write a single unfragmented text frame (server -> client, unmasked).
 async fn write_text_frame(stream: &mut tokio::net::TcpStream, text: &str) -> std::io::Result<()> {
     let payload = text.as_bytes();
     let mut frame = Vec::with_capacity(payload.len() + 10);
-    frame.push(0x81); // FIN + text opcode
+    frame.push(0x81);
     let len = payload.len();
     if len < 126 {
         frame.push(len as u8);
@@ -145,7 +129,6 @@ async fn write_text_frame(stream: &mut tokio::net::TcpStream, text: &str) -> std
     stream.write_all(&frame).await
 }
 
-/// Minimal base64 (standard alphabet, with padding) — avoids a dependency.
 fn base64_encode(input: &[u8]) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
@@ -185,7 +168,6 @@ mod tests {
 
     #[test]
     fn ws_accept_rfc_example() {
-        // RFC 6455 §1.3 example: key "dGhlIHNhbXBsZSBub25jZQ==" -> accept below.
         let accept = compute_accept("dGhlIHNhbXBsZSBub25jZQ==");
         assert_eq!(accept, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
     }

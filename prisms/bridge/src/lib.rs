@@ -1,25 +1,3 @@
-//! # Bridge Prism
-//!
-//! Guardian-attested cross-chain transfers between VEILUX and foreign chains
-//! (Cosmos, Solana, Ethereum, or a custom chain). The trust model is a relayer
-//! quorum, like Wormhole: a registered set of guardians watches both sides and
-//! signs attestations; the bridge accepts an inbound transfer once a quorum of
-//! valid Ed25519 signatures is present.
-//!
-//! ## Flows
-//! - **Outbound** (`Send`): VEILUX tokens are locked (debited) here and an
-//!   `OutboundLocked` event is emitted with a sequence number. Off-chain
-//!   relayers observe it and mint/release on the foreign chain.
-//! - **Inbound** (`Redeem`): relayers submit a foreign transfer plus guardian
-//!   signatures. The bridge verifies quorum, checks the per-chain sequence
-//!   (anti-replay), and credits the wrapped token to the recipient.
-//!
-//! ## Determinism & safety
-//! Signature verification is deterministic, so every validator agrees. Replay
-//! is prevented by a strictly-increasing per-chain sequence persisted in state.
-//! Token balances reuse the Token Prism's `token/bal/<id>/<party>` keys
-//! (decimal strings), so bridged value is real, spendable balance.
-
 mod types;
 
 pub use types::{BridgeConfig, ForeignChain, GuardianSignature, InboundTransfer, OutboundTransfer};
@@ -29,8 +7,6 @@ use veilux_kernel::{
     Command, Event, Hash, PartyId, Prism, PrismError, PrismInfo, PrismOutput, StateTree, Visibility,
 };
 
-/// Token balance key — shared with the Token Prism so bridged tokens are
-/// fungible with native ones.
 fn bal_key(token_id: &Hash, who: &PartyId) -> String {
     format!("token/bal/{}/{}", token_id.to_hex(), who.0)
 }
@@ -63,17 +39,14 @@ fn set_balance(
         .map_err(|e| PrismError::Internal(e.to_string()))
 }
 
-/// Commands the Bridge Prism understands.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum BridgeCommand {
-    /// Register or update a foreign-chain bridge (admin only after creation).
     RegisterChain {
         chain: ForeignChain,
         guardians: Vec<String>,
         quorum: usize,
     },
-    /// Lock VEILUX tokens to send them to a foreign chain.
     Send {
         chain: ForeignChain,
         recipient: String,
@@ -81,7 +54,6 @@ pub enum BridgeCommand {
         #[serde(with = "u128_dec")]
         amount: u128,
     },
-    /// Redeem a guardian-attested inbound transfer, minting wrapped tokens.
     Redeem {
         transfer: InboundTransfer,
         signatures: Vec<GuardianSignature>,
@@ -100,7 +72,6 @@ mod u128_dec {
     }
 }
 
-/// Events the Bridge Prism emits.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum BridgeEvent {
@@ -153,9 +124,6 @@ impl BridgePrism {
         }
     }
 
-    /// Verify that at least `quorum` distinct registered guardians signed the
-    /// digest. Each signature must be from a configured guardian, and no
-    /// guardian is counted twice.
     fn verify_quorum(
         config: &BridgeConfig,
         digest: &Hash,
@@ -165,10 +133,10 @@ impl BridgePrism {
         let mut valid = 0usize;
         for sig in signatures {
             if !config.guardians.contains(&sig.public_key) {
-                continue; // not a registered guardian
+                continue;
             }
             if seen.contains(&sig.public_key) {
-                continue; // duplicate guardian
+                continue;
             }
             let pk = hex_to_bytes(&sig.public_key)
                 .ok_or_else(|| PrismError::InvalidPayload("bad guardian pubkey hex".into()))?;
@@ -220,7 +188,6 @@ impl Prism for BridgePrism {
                     ));
                 }
                 let key = BridgeConfig::config_key(chain);
-                // If a config exists, only its admin may update it.
                 if let Ok(Some(existing)) = state.get_json::<BridgeConfig>(&key) {
                     if existing.admin != command.submitter {
                         return Err(PrismError::Unauthorized(
@@ -264,12 +231,8 @@ impl Prism for BridgePrism {
                         "insufficient balance to bridge".into(),
                     ));
                 }
-                // Lock = debit sender (tokens are held by the bridge until the
-                // foreign side mints; a real deployment escrows to a bridge
-                // account — here we burn-on-send and mint-on-redeem).
                 set_balance(state, &token_id, &sender, bal - amount)?;
 
-                // Next outbound sequence.
                 let seq: u64 = state
                     .get_json::<u64>(&out_seq_key(chain))
                     .ok()
@@ -311,7 +274,6 @@ impl Prism for BridgePrism {
             } => {
                 let config = Self::load_config(state, transfer.chain)?;
 
-                // Anti-replay: sequence must be exactly the next expected one.
                 let expected: u64 = state
                     .get_json::<u64>(&seq_key(transfer.chain))
                     .ok()
@@ -327,14 +289,12 @@ impl Prism for BridgePrism {
                 let digest = transfer.digest();
                 let verified = Self::verify_quorum(&config, &digest, &signatures)?;
 
-                // Mint wrapped tokens to the recipient.
                 let bal = get_balance(state, &transfer.token_id, &transfer.recipient);
                 let new_bal = bal
                     .checked_add(transfer.amount)
                     .ok_or_else(|| PrismError::Internal("balance overflow".into()))?;
                 set_balance(state, &transfer.token_id, &transfer.recipient, new_bal)?;
 
-                // Advance the per-chain sequence.
                 state
                     .put_json(seq_key(transfer.chain), &(expected + 1))
                     .map_err(|e| PrismError::Internal(e.to_string()))?;
@@ -367,7 +327,6 @@ impl Prism for BridgePrism {
     }
 }
 
-/// Build a `register_chain` command.
 pub fn register_chain_command(
     submitter: PartyId,
     visibility: Visibility,
@@ -391,7 +350,6 @@ pub fn register_chain_command(
     }
 }
 
-/// Build a `send` (outbound lock) command.
 pub fn send_command(
     submitter: PartyId,
     visibility: Visibility,
@@ -475,7 +433,6 @@ mod tests {
         };
         let digest = transfer.digest();
 
-        // Two of three guardians sign -> meets quorum.
         let signatures = vec![
             GuardianSignature {
                 public_key: hex::encode(g1.public_key()),
@@ -530,7 +487,6 @@ mod tests {
             amount: 500,
         };
         let digest = transfer.digest();
-        // Only one signature -> below quorum of 2.
         let signatures = vec![GuardianSignature {
             public_key: hex::encode(g1.public_key()),
             signature: hex::encode(g1.sign_bytes(digest.as_bytes())),
@@ -598,9 +554,7 @@ mod tests {
         };
 
         prism.handle(&make(0), &mut state).unwrap();
-        // Replaying sequence 0 must fail (expected is now 1).
         assert!(prism.handle(&make(0), &mut state).is_err());
-        // Correct next sequence works.
         prism.handle(&make(1), &mut state).unwrap();
         assert_eq!(get_balance(&state, &token_id, &PartyId::new("alice")), 200);
     }
@@ -623,10 +577,8 @@ mod tests {
             token_id,
             400,
         );
-        // Solana bridge not registered -> should fail.
         assert!(prism.handle(&send, &mut state).is_err());
 
-        // Register Solana, then send works.
         register(
             &mut state,
             &prism,

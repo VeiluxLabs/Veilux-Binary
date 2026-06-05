@@ -28,26 +28,17 @@ pub enum AuthError {
     BadProof,
 }
 
-/// A validator the local node is willing to talk to, identified by its party
-/// name and the Ed25519 public key that name must sign with.
 #[derive(Clone, Debug)]
 pub struct PeerKey {
     pub party: String,
     pub public_key: Vec<u8>,
 }
 
-/// Transport authentication policy. When attached to a node, every peer
-/// connection (inbound or outbound) must complete a mutual challenge-response
-/// before any gossip is exchanged.
 #[derive(Clone)]
 pub struct AuthConfig {
-    /// Local validator identity used to answer challenges.
     pub party: String,
     pub secret_seed: [u8; 32],
-    /// Public keys this node will accept, keyed by party name.
     pub peers: Vec<PeerKey>,
-    /// Source IPs allowed to dial this node. Empty = accept any source IP
-    /// (key authentication is still enforced).
     pub ip_allowlist: Vec<IpAddr>,
 }
 
@@ -64,7 +55,6 @@ impl AuthConfig {
     }
 }
 
-/// Result of a successful handshake.
 #[derive(Clone, Debug)]
 pub struct PeerInfo {
     pub party: String,
@@ -110,13 +100,6 @@ async fn read_msg<R: AsyncBufReadExt + Unpin>(r: &mut R) -> Result<AuthMsg, Auth
     Ok(serde_json::from_str(line.trim())?)
 }
 
-/// Run the symmetric mutual handshake over an already-split connection.
-///
-/// Both endpoints send a `Hello` carrying their party, public key, and a fresh
-/// random challenge, then each signs the *other* side's challenge and returns a
-/// `Proof`. A connection only proceeds to gossip if both proofs verify against
-/// keys on the local allowlist. This authenticates the peer (only the holder of
-/// the registered secret key can answer) without trusting the network.
 pub async fn perform_handshake<R, W>(
     cfg: &AuthConfig,
     reader: &mut R,
@@ -243,7 +226,6 @@ mod tests {
         let (ar, aw) = tokio::io::split(a);
         let (br, bw) = tokio::io::split(b);
 
-        // v1 only trusts v2, but an unlisted "intruder" dials in.
         let a_cfg = cfg_for("v1", &["v2"]);
         let intruder = cfg_for("intruder", &["v1"]);
 
@@ -270,7 +252,6 @@ mod tests {
         let (br, bw) = tokio::io::split(b);
 
         let a_cfg = cfg_for("v1", &["v2"]);
-        // Attacker claims to be "v2" but signs with the wrong seed.
         let mut forger = cfg_for("v2", &["v1"]);
         forger.secret_seed = [9u8; 32];
 

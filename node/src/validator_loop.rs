@@ -10,6 +10,7 @@ use veilux_veil::PartyIdentity;
 
 use crate::driver::{Action, Outbound, Phase, RoundMachine};
 use crate::node::Node;
+use crate::slash_watch::EquivocationWatch;
 use crate::viewsync::ViewCoordinator;
 
 pub struct ValidatorConfig {
@@ -20,11 +21,8 @@ pub struct ValidatorConfig {
     pub bootstrap: Vec<String>,
     pub peers: Vec<(String, [u8; 32])>,
     pub block_interval_secs: u64,
-    /// When true, require a mutual signed handshake on every peer connection.
     pub secure: bool,
-    /// Source IPs allowed to dial this node (empty = any, key auth still on).
     pub ip_allowlist: Vec<std::net::IpAddr>,
-    /// Optional genesis spec; seeds the native token on a fresh chain.
     pub genesis: Option<crate::genesis::ChainSpec>,
 }
 
@@ -49,8 +47,6 @@ fn validator_set(me: &(String, [u8; 32]), peers: &[(String, [u8; 32])]) -> Valid
     vs
 }
 
-/// All mutable consensus state for the running validator, kept together so the
-/// tick handler and the message handler operate on one coherent view.
 struct Engine {
     node: Node,
     aurora: Aurora,
@@ -61,6 +57,7 @@ struct Engine {
     stale_ticks: u32,
     machine: RoundMachine,
     viewsync: ViewCoordinator,
+    slash_watch: EquivocationWatch,
 }
 
 impl Engine {
@@ -70,6 +67,7 @@ impl Engine {
         self.stale_ticks = 0;
         self.machine = RoundMachine::new_round(self.height, self.view);
         self.viewsync.reset(self.height);
+        self.slash_watch.prune_below(self.height.saturating_sub(8));
     }
 
     fn adopt_view(&mut self, view: u32) {
@@ -173,6 +171,7 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         stale_ticks: 0,
         machine: RoundMachine::new_round(start_height, 0),
         viewsync: ViewCoordinator::new(start_height),
+        slash_watch: EquivocationWatch::new(),
     };
 
     let mut ticker = tokio::time::interval(Duration::from_secs(cfg.block_interval_secs.max(1)));
@@ -202,10 +201,6 @@ async fn on_tick(eng: &mut Engine, net: &NetHandle) {
     if eng.node.head().height >= eng.height {
         eng.reset_height();
     } else if eng.machine.phase != Phase::Committed {
-        // Liveness: if this height has not committed, propose a view change.
-        // We do NOT advance locally on our own timer — we broadcast a signed
-        // view-change vote and only adopt the new view once 2/3+ of stake
-        // agrees. This keeps every honest node on the same proposer.
         eng.stale_ticks += 1;
         if eng.stale_ticks >= VIEW_TIMEOUT_TICKS {
             eng.stale_ticks = 0;
@@ -239,7 +234,6 @@ async fn on_tick(eng: &mut Engine, net: &NetHandle) {
         }
     }
 
-    // Gossip recovery: re-broadcast our own votes each tick.
     let my_votes: Vec<Vote> = eng.machine.my_votes().to_vec();
     for vote in &my_votes {
         let signed = sign_vote(&eng.identity, vote.clone());
@@ -258,6 +252,7 @@ async fn handle_message(msg: NetMessage, net: &NetHandle, eng: &mut Engine) {
             run_actions(eng, net, acts).await;
         }
         NetMessage::Vote(vote) => {
+            detect_equivocation(eng, net, &vote).await;
             let me = eng.me.clone();
             let acts = eng.machine.on_vote(*vote, &me, &mut eng.aurora);
             run_actions(eng, net, acts).await;
@@ -385,6 +380,35 @@ fn sign_vote(identity: &PartyIdentity, mut vote: Vote) -> Vote {
         vote.signature = identity.sign_bytes(&vote.signing_bytes());
     }
     vote
+}
+
+async fn detect_equivocation(eng: &mut Engine, net: &NetHandle, vote: &Vote) {
+    let pubkey = match eng.aurora.validators.get(&vote.voter) {
+        Some(v) => v.public_key.clone(),
+        None => return,
+    };
+    let Some(proof) = eng.slash_watch.observe(vote, &pubkey) else {
+        return;
+    };
+    warn!(offender = %proof.offender, "equivocation detected; submitting slash evidence");
+
+    let nonce = eng
+        .node
+        .nonces
+        .get(eng.identity.party())
+        .map(|n| n + 1)
+        .unwrap_or(0);
+    let cmd = prism_staking::staking_command(
+        eng.me.clone(),
+        Visibility::Public,
+        nonce,
+        eng.height,
+        &prism_staking::StakingCommand::Slash { proof },
+    );
+    let signed = eng.identity.sign(cmd);
+    if eng.node.submit_signed(signed.clone()).is_ok() {
+        let _ = net.net.broadcast(&NetMessage::Command(Box::new(signed)));
+    }
 }
 
 fn make_view_change(identity: &PartyIdentity, height: u64, view: u32) -> ViewChange {

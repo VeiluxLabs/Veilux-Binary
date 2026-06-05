@@ -1,9 +1,3 @@
-//! End-to-end SDK example: connect to a `veilux serve` dev node, create a
-//! token, transfer it, and read the chain back.
-//!
-//! Run a node first:  veilux serve --addr 127.0.0.1:8645
-//! Then:              cargo run -p veilux-sdk --example quickstart
-
 use veilux_sdk::{builders, Client, PartyIdentity, Visibility};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,7 +14,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         info.network, info.height, info.prisms
     );
 
-    // 1) Create a fungible token.
     let create = builders::token_create(
         alice.party().clone(),
         Visibility::Public,
@@ -40,7 +33,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         res.accepted, res.command_id
     );
 
-    // 2) Transfer some to bob (token id is derived deterministically).
     let token_id = veilux_sdk::Hash::commit("token/id", &[b"alice", b"GLD", b"Gold Coin"]);
     let transfer = builders::token_transfer(
         alice.party().clone(),
@@ -53,7 +45,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let res = client.submit(&alice.sign(transfer))?;
     println!("transfer accepted={}", res.accepted);
 
-    // 3) Read the chain back.
     let height = client.block_number()?;
     println!("chain height now: {height}");
     let block = client.block_by_number(height)?;
@@ -62,7 +53,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         block.height, block.hash, block.command_count
     );
 
-    // 4) Read bob's token balance from state (stored as a decimal string).
     let bal_key = format!("token/bal/{}/bob", token_id.to_hex());
     let bal = client.get_state(&bal_key)?;
     if bal.found {

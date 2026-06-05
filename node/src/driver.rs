@@ -56,8 +56,6 @@ impl RoundMachine {
             .and_then(|h| self.seen_blocks.get(h))
     }
 
-    /// Votes this node has cast, for periodic re-broadcast so late-joining or
-    /// lossy peers eventually receive them (gossip recovery).
     pub fn my_votes(&self) -> &[Vote] {
         &self.my_votes
     }
@@ -73,9 +71,6 @@ impl RoundMachine {
         }
     }
 
-    /// Cast our own vote: count it into our own engine AND return it for
-    /// broadcast. This is essential — votes are not looped back over the
-    /// network, so a node must self-count to ever reach quorum.
     fn cast_own_vote(
         &mut self,
         me: &PartyId,
@@ -107,8 +102,6 @@ impl RoundMachine {
             block: Box::new(block),
         })];
 
-        // Only prevote once (first time we propose this height); subsequent
-        // ticks just re-broadcast the proposal for late peers.
         if aurora.validators.is_validator(me) && self.phase == Phase::Idle {
             self.phase = Phase::Prevoted;
             info!(height = self.height, %hash, "proposing block to network");

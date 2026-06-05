@@ -53,10 +53,6 @@ impl Default for Limits {
     }
 }
 
-/// Deterministic fee policy applied during block execution. The fee for a
-/// command is `gas_used * price_per_gas`; a `burn_bps` fraction is burned and
-/// the rest is paid to the block proposer. Disabled by default (`price_per_gas
-/// = 0`) so existing flows are unchanged until a chain opts in at genesis.
 #[derive(Clone, Copy, Debug)]
 pub struct FeePolicy {
     pub price_per_gas: u128,
@@ -146,15 +142,10 @@ impl Node {
         self.keyrings.push(keyring);
     }
 
-    /// True when the chain has only its genesis block and no state yet — the one
-    /// moment it is safe to seed genesis allocations.
     pub fn is_fresh(&self) -> bool {
         self.blocks.len() == 1 && self.state.is_empty()
     }
 
-    /// Seed deterministic genesis state (e.g. native-token allocations) and
-    /// persist it. Only takes effect on a fresh chain; a no-op otherwise, so it
-    /// is safe to call on every startup.
     pub fn seed_genesis_state<F>(&mut self, seeder: F) -> Result<bool, NodeError>
     where
         F: FnOnce(&mut StateTree) -> Result<(), NodeError>,
@@ -171,11 +162,6 @@ impl Node {
         Ok(true)
     }
 
-    /// Charge the deterministic transaction fee for one command. No-op unless a
-    /// price is configured. The payer is the command submitter; the reward goes
-    /// to the block proposer and a fraction is burned. Charge is capped at the
-    /// payer's native balance, so it never fails re-execution. Returns silently
-    /// because the fee is best-effort revenue, not a validity condition.
     fn charge_fee(
         policy: FeePolicy,
         state: &mut StateTree,
@@ -204,8 +190,6 @@ impl Node {
         self.blocks.last().expect("chain always has genesis")
     }
 
-    /// Blocks at height >= `from_height` (for serving sync requests). Capped to
-    /// avoid oversized responses.
     pub fn blocks_from(&self, from_height: u64, max: usize) -> Vec<Block> {
         self.blocks
             .iter()
@@ -269,10 +253,6 @@ impl Node {
         self.commit_block(block)
     }
 
-    /// Assemble a proposal block from the mempool. Applies commands to a
-    /// **clone** of the state to compute the events/state roots, without
-    /// mutating committed state. The returned block carries the commands so any
-    /// node can deterministically re-execute it in [`commit_block`].
     pub fn assemble_block(&mut self) -> Result<Block, NodeError> {
         let parent = self.head().clone();
         let take = self.mempool.len().min(self.limits.max_block_commands);
@@ -307,13 +287,6 @@ impl Node {
         Ok(block)
     }
 
-    /// Commit an agreed block. This is the single, deterministic execution path
-    /// run by **every** node (proposer and non-proposers alike):
-    ///
-    /// 1. Re-execute the block's commands against real state.
-    /// 2. Verify the recomputed events root and state root match the block's
-    ///    (rejecting any block whose proposer lied about the outcome).
-    /// 3. Project events into per-party sub-ledgers, append, and persist.
     pub fn commit_block(&mut self, mut block: Block) -> Result<BlockSummary, NodeError> {
         if block.parent != self.head().hash() || block.height != self.head().height + 1 {
             return Err(NodeError::BadParent);
@@ -345,7 +318,6 @@ impl Node {
             return Err(NodeError::RootMismatch("state_root".into()));
         }
 
-        // Use the authoritative re-executed events for projection.
         block.events = events;
         let projection = project_block(&block, &self.keyrings)?;
         let mut delivered = 0usize;
@@ -358,7 +330,6 @@ impl Node {
             }
         }
 
-        // Adopt the new state and prune included commands from the mempool.
         self.state = new_state;
         let included: std::collections::HashSet<Hash> =
             block.commands.iter().map(|c| c.id()).collect();
@@ -389,9 +360,6 @@ impl Node {
         Ok(summary)
     }
 
-    /// Accept a block finalized elsewhere. Now identical to [`commit_block`] —
-    /// non-proposers fully re-execute and verify, so all nodes converge on the
-    /// same authenticated state (no more fast-accept divergence).
     pub fn accept_external_block(&mut self, block: Block) -> Result<bool, NodeError> {
         if block.parent != self.head().hash() || block.height != self.head().height + 1 {
             return Ok(false);

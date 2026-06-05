@@ -25,12 +25,8 @@ const PROPOSAL_PREFIX: &str = "gov/proposal/";
 const VOTE_PREFIX: &str = "gov/vote/";
 const SLASH_PREFIX: &str = "staking/slashed/";
 
-/// Default fraction of self-bonded stake burned on a proven equivocation, in
-/// basis points (2000 = 20%).
 pub const DEFAULT_SLASH_BPS: u16 = 2_000;
 
-/// Reserved account that custodies all staked funds. Value moved here is locked
-/// (unspendable) until unstaked; total token supply is unchanged.
 pub fn escrow_account() -> PartyId {
     PartyId::new("staking/escrow")
 }
@@ -81,17 +77,10 @@ pub struct Proposal {
     pub deadline_height: u64,
 }
 
-/// Proof that a validator equivocated: two distinct messages it signed for the
-/// same consensus slot. The signing bytes are opaque to staking (they come from
-/// the consensus vote scheme); staking only checks that both were signed by the
-/// same offender key over *different* messages, which is unforgeable evidence of
-/// double-signing.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EquivocationProof {
     pub offender: PartyId,
-    /// Hex-encoded Ed25519 public key the offender signs consensus votes with.
     pub public_key: String,
-    /// Two distinct signed messages (hex) for the same height/round.
     pub message_a: String,
     pub signature_a: String,
     pub message_b: String,
@@ -101,42 +90,39 @@ pub struct EquivocationProof {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum StakingCommand {
-    /// Bond native LUX as your own validator stake.
     Stake {
         #[serde(with = "u128_dec")]
         amount: u128,
     },
-    /// Withdraw previously self-bonded stake back to your balance.
     Unstake {
         #[serde(with = "u128_dec")]
         amount: u128,
     },
-    /// Delegate native LUX toward another party's stake (boosts their power).
     Delegate {
         validator: PartyId,
         #[serde(with = "u128_dec")]
         amount: u128,
     },
-    /// Undelegate previously delegated stake.
     Undelegate {
         validator: PartyId,
         #[serde(with = "u128_dec")]
         amount: u128,
     },
-    /// Open a governance proposal (requires some self-bonded stake).
     Propose {
         title: String,
         description: String,
         voting_period: u64,
     },
-    /// Cast a stake-weighted vote on an active proposal.
-    Vote { proposal_id: Hash, approve: bool },
-    /// Finalize a proposal once its voting period has elapsed.
-    Finalize { proposal_id: Hash },
-    /// Submit equivocation evidence to slash a double-signing validator. Anyone
-    /// may submit; the offender's self-bonded stake is reduced by `slash_bps`
-    /// (burned), and the offence is recorded so it cannot be replayed.
-    Slash { proof: EquivocationProof },
+    Vote {
+        proposal_id: Hash,
+        approve: bool,
+    },
+    Finalize {
+        proposal_id: Hash,
+    },
+    Slash {
+        proof: EquivocationProof,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -198,9 +184,6 @@ pub enum StakingEvent {
     },
 }
 
-/// Block height is injected into staking commands by the node before routing,
-/// so the deterministic VM has a notion of "now" without reading a clock. The
-/// height is appended as a little-endian u64 trailer on the command payload.
 fn split_height(payload: &[u8]) -> (&[u8], u64) {
     if payload.len() < 8 {
         return (payload, 0);
@@ -520,7 +503,6 @@ impl Prism for StakingPrism {
             }
 
             StakingCommand::Slash { proof } => {
-                // Verify the offender's key actually signed both messages.
                 let pk = hex::decode(proof.public_key.trim_start_matches("0x"))
                     .map_err(|_| PrismError::InvalidPayload("bad public key hex".into()))?;
                 let ma = hex::decode(proof.message_a.trim_start_matches("0x"))
@@ -542,8 +524,6 @@ impl Prism for StakingPrism {
                 verify_bytes(&pk, &mb, &sb)
                     .map_err(|_| PrismError::Unauthorized("signature_b invalid".into()))?;
 
-                // One offence per (offender, message pair); deterministic id with
-                // the two messages ordered so A/B order cannot be replayed.
                 let (lo, hi) = if ma <= mb { (&ma, &mb) } else { (&mb, &ma) };
                 let offence = Hash::commit(
                     "staking/equivocation",
@@ -556,8 +536,6 @@ impl Prism for StakingPrism {
                 let mut rec = Self::stake_of(state, &proof.offender);
                 let burned = rec.self_bonded * (DEFAULT_SLASH_BPS as u128) / 10_000;
                 if burned > 0 {
-                    // Slashed stake is burned from the escrow (where bonded funds
-                    // live), reducing total supply.
                     burn_from(state, &native_token_id(), &escrow_account(), burned)
                         .map_err(|_| PrismError::Internal("slash burn failed".into()))?;
                     rec.self_bonded -= burned;
@@ -587,8 +565,6 @@ impl Prism for StakingPrism {
     }
 }
 
-/// Encode a staking command with the current block height appended as the
-/// trailing 8-byte LE trailer the prism expects.
 pub fn staking_command(
     submitter: PartyId,
     visibility: Visibility,
@@ -806,7 +782,6 @@ mod tests {
         use veilux_veil::PartyIdentity;
         let (p, mut s, _) = setup();
 
-        // bob bonds 1000 self stake.
         let stake = staking_command(
             PartyId::new("bob"),
             Visibility::Public,
@@ -817,7 +792,6 @@ mod tests {
         p.handle(&stake, &mut s).unwrap();
         assert_eq!(voting_power_of(&s, &PartyId::new("bob")), 1_000);
 
-        // bob double-signs two different consensus messages for the same slot.
         let bob_key = PartyIdentity::from_seed("bob", &[7u8; 32]);
         let msg_a = b"vote-for-block-A".to_vec();
         let msg_b = b"vote-for-block-B".to_vec();
@@ -846,14 +820,13 @@ mod tests {
                 remaining_self,
                 ..
             } => {
-                assert_eq!(burned, 200); // 20% of 1000
+                assert_eq!(burned, 200);
                 assert_eq!(remaining_self, 800);
             }
             _ => panic!("expected Slashed"),
         }
         assert_eq!(voting_power_of(&s, &PartyId::new("bob")), 800);
 
-        // Replaying the same evidence is rejected.
         let slash2 = staking_command(
             PartyId::new("watchdog"),
             Visibility::Public,
@@ -877,7 +850,6 @@ mod tests {
         );
         p.handle(&stake, &mut s).unwrap();
 
-        // Attacker fabricates evidence with a mismatched signature.
         let attacker = PartyIdentity::from_seed("attacker", &[9u8; 32]);
         let proof = EquivocationProof {
             offender: PartyId::new("bob"),
@@ -894,7 +866,6 @@ mod tests {
             3,
             &StakingCommand::Slash { proof },
         );
-        // signature_b does not match message_b -> rejected, no slash.
         assert!(p.handle(&slash, &mut s).is_err());
         assert_eq!(voting_power_of(&s, &PartyId::new("bob")), 1_000);
     }
