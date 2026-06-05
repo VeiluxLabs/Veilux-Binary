@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Veil — Canton-style party-based privacy and sub-ledger projections for VEILUX"
+description = "Veil — VeilLedger party-based privacy and sub-ledger projections for VEILUX"
 
 [dependencies]
 veilux-kernel.workspace = true

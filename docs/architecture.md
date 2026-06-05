@@ -63,7 +63,7 @@ events, never direct calls.
 A normal blockchain replicates all data to all nodes. That's the opposite of
 what enterprises (and many AI workloads on sensitive data) want.
 
-### The Canton-style solution
+### The VeilLedger solution
 - **One virtual shared ledger, many private projections.** Every event has a
   `Visibility`. The global Merkle root is over *commitments* (`Hash`), which
   reveal nothing about contents but let all nodes agree on history.

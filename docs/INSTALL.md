@@ -51,7 +51,7 @@ The workspace layout:
 ```
 veilux/
 ├── kernel/            Photon core (tiny)
-├── veil/              Canton-style privacy
+├── veil/              VeilLedger privacy
 ├── prisms/ai/         AI add-on
 ├── prisms/storage/    Storage add-on
 └── node/              the `veilux` binary

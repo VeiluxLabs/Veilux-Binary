@@ -135,7 +135,7 @@ fn cmd_demo() -> Result<()> {
 
     let alice_view = node.sub_ledger(&PartyId::new("alice")).unwrap();
     let bob_view = node.sub_ledger(&PartyId::new("bob")).unwrap();
-    println!("\n--- privacy check (Canton-style) ---");
+    println!("\n--- privacy check (VeilLedger) ---");
     println!("global events_root (all nodes agree): {}", s2.events_root);
     println!(
         "alice can see {} ai event(s)",

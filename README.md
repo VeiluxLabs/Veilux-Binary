@@ -14,7 +14,7 @@ VEILUX is built around three ideas:
 
 2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Shipped Prisms: **AI** (+ optional Ollama), **Storage**, **Token** (ERC-20-like), **NFT** (ERC-721-like), and **Contract** (PhotonVM). They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait.
 
-3. **Privacy like Canton.** The *Veil* layer gives you one logically shared ledger where **no participant sees data they aren't a stakeholder of**. Every node agrees on the same Merkle root of *blinded commitments*, while contents are sealed per-party into encrypted **views** and stored in per-party **sub-ledgers**.
+3. **Privacy by ledger (VeilLedger).** The *Veil* layer gives you one logically shared ledger where **no participant sees data they aren't a stakeholder of**. Every node agrees on the same Merkle root of *blinded commitments*, while contents are sealed per-party into encrypted **views** and stored in per-party **sub-ledgers**.
 
 ```
             ╦  ╦╔═╗╦╦  ╦ ╦═╗ ╦
@@ -40,7 +40,7 @@ veilux/
 │   ├── prism.rs       #   the Prism trait — the one extension point
 │   ├── cascade.rs     #   the Prism pipeline / executor
 │   └── state.rs       #   content-addressed authenticated state
-├── veil/              # Canton-style privacy
+├── veil/              # VeilLedger privacy
 │   ├── view.rs        #   encrypted per-party views (ChaCha20-Poly1305)
 │   ├── identity.rs    #   Ed25519 signing identities
 │   ├── disclosure.rs  #   scoped selective disclosure (auditor/regulator)
@@ -66,7 +66,7 @@ submit(ai.infer) ─► AI Prism ─► InferenceCommitted event
                                  └─(large result)─► storage.put ─► Storage Prism ─► Stored event
 ```
 
-## Privacy model (the Canton trick)
+## Privacy model (the VeilLedger design)
 
 - Each event declares a `Visibility`: `Public` or `Parties([...])`.
 - The block commits to a Merkle root over **commitments** (blinded hashes), so
@@ -130,7 +130,7 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 | `docs/architecture.md` | System design, cascade, state model |
 | `docs/add-ons.md` | Per-Prism specs (AI, Storage, Token, NFT, Contract) + how to build your own |
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
-| `docs/privacy-model.md` | Deep Canton-style banking-grade privacy research |
+| `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
 | `docs/security.md` | Threat model + exploitation review + what runs safely |
 | `docs/roadmap.md` | Future add-ons the chain needs next |
 

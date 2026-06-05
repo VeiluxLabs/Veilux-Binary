@@ -1,8 +1,8 @@
 # VEILUX Privacy Model — Banking-Grade Confidentiality
 
-> Deep dive into the Veil layer: how VEILUX delivers Canton-style privacy that
-> is strong enough for regulated finance, and how it reconciles confidentiality
-> with mandatory oversight.
+> Deep dive into the Veil layer: how VEILUX's **VeilLedger** design delivers
+> privacy strong enough for regulated finance, and how it reconciles
+> confidentiality with mandatory oversight.
 
 ---
 
@@ -26,30 +26,29 @@ VEILUX targets both at once:
 
 ---
 
-## 2. The Canton approach (and what VEILUX borrows)
+## 2. The VeilLedger design principles
 
-Canton Network is a public network of interoperable, privacy-preserving
-applications designed for confidential multi-party financial workflows without a
-single globally replicated state ([Messari, 2026](https://messari.io/report/understanding-canton-network-a-comprehensive-overview)).
-Content was rephrased for compliance with licensing restrictions. Two of its
-defining ideas drive the Veil design:
+VEILUX's privacy layer, **VeilLedger**, is built on two design principles that
+are well established in confidential-ledger research for regulated finance:
 
 1. **Sub-transaction privacy.** A transaction is decomposed into views; each
-   participant receives only the views (sub-transactions) it is a stakeholder
-   of. No party sees the whole transaction unless entitled to.
-2. **Separation of ordering from validation.** The synchronizer routes and
-   orders encrypted messages between validators but does not see the contents;
-   validation happens at the participants who hold the data
-   ([DAIC, 2025](https://daic.capital/blog/canton-network-explained)).
-   Content was rephrased for compliance with licensing restrictions.
+   participant receives only the views it is a stakeholder of. No party sees the
+   whole transaction unless entitled to.
+2. **Separation of ordering from validation.** The ordering layer routes and
+   sequences *blinded commitments* between nodes but never sees contents;
+   validation happens locally at the participants who actually hold the data.
 
-The trade-off, as independent analysis notes, is a trust model based on known
-institutions exchanging encrypted messages, as opposed to a pure
-math-based (ZK) model ([L2BEAT, 2025](https://l2beat.com/publications/canton-vs-prividium)).
-Content was rephrased for compliance with licensing restrictions. VEILUX adopts
-the Canton-style message/projection model as its baseline and adds optional
-cryptographic hardening (see §7) so deployments can dial the trust assumption
-toward "trust the math" where required.
+The baseline trust model is therefore one of known participants exchanging
+encrypted messages whose commitments are globally ordered — as opposed to a pure
+math-based (ZK) model. VeilLedger uses this message/projection model as its
+foundation and adds optional cryptographic hardening (see §7) so deployments can
+dial the trust assumption toward "trust the math" where required.
+
+> Prior art and background. The general approach to institutional ledger privacy
+> — selective disclosure, data sovereignty, and a "glass-box" view for
+> regulators — is discussed across the industry; see the References in §9 for
+> background reading. All such material was summarized/rephrased for compliance
+> with licensing restrictions.
 
 ---
 
@@ -168,7 +167,7 @@ without ever exposing its signing key.
 
 ## 7. Hardening roadmap (toward "trust the math")
 
-The shipped Veil layer is a Canton-style message/projection model. These
+The shipped Veil layer is a message/projection privacy model. These
 optional upgrades reduce trust assumptions and residual leakage:
 
 1. **Wrapped keys via X25519.** Replace passphrase-seeded view keys with
@@ -206,16 +205,19 @@ optional upgrades reduce trust assumptions and residual leakage:
 
 ---
 
-## 9. References
+## 9. References (background reading)
 
-- Canton Network — Privacy Model & Technical Primer: https://docs.canton.network/ , https://canton.network/blog/a-technical-primer
-- Messari — Understanding Canton Network: https://messari.io/report/understanding-canton-network-a-comprehensive-overview
-- L2BEAT — Canton vs Prividium: https://l2beat.com/publications/canton-vs-prividium
-- DAIC — Canton Network Explained: https://daic.capital/blog/canton-network-explained
+These are general industry sources on confidential ledgers, selective
+disclosure, and confidential computing. They are listed as prior-art background
+only; VeilLedger is VEILUX's own implementation.
+
+- Confidential ledger privacy & technical primers (industry overviews)
+- Messari — confidential multi-party ledger analysis: https://messari.io/
+- L2BEAT — institutional privacy vs ZK approaches: https://l2beat.com/
 - Chainlink — Institutional Blockchain Privacy; Confidential Computing for Blockchain: https://chain.link/article/institutional-blockchain-privacy-solutions , https://chain.link/article/confidential-computing-blockchain
 - Inco — Programmable View Access: https://www.inco.org/blog/programmable-view-access
 - Aleo — View Key & Compliance: https://aleo.org/post/aleo-view-key-compliance
 - Phala — Confidential Computing in Finance: https://phala.com/de/learn/Confidential-Computing-in-Finance
 
-*All external content above was rephrased/summarized for compliance with
-licensing restrictions; see links for originals.*
+*All external content referenced above was rephrased/summarized for compliance
+with licensing restrictions; see links for originals.*
