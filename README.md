@@ -128,6 +128,10 @@ The `run` command opens a data directory (default `./veilux-data`), loads any
 existing chain from disk, produces+persists a block, and reports the Aurora BFT
 proposer slot. Re-running it shows the chain growing across restarts.
 
+For a live multi-node BFT network, use `veilux validator` (see
+`docs/consensus-networking.md`) — three validators reach 2/3+ finality over TCP
+and stay byte-for-byte in sync.
+
 See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-start.
 
 ## Documentation

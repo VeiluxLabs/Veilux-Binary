@@ -1,8 +1,13 @@
 /target
 /veilux-data
+/veilux-data-*
+/d1
+/d2
+/d3
 **/*.rs.bk
 *.pdb
 .DS_Store
 .idea/
 .vscode/
 *.log
+profile.md

@@ -1,4 +1,6 @@
+mod driver;
 mod node;
+mod validator_loop;
 
 use anyhow::Result;
 use tracing::info;
@@ -32,17 +34,79 @@ fn main() -> Result<()> {
         "info" => cmd_info(),
         "demo" => cmd_demo(),
         "run" => cmd_run(args.get(2).map(|s| s.as_str()).unwrap_or("./veilux-data")),
+        "validator" => cmd_validator(&args),
         "version" | "--version" | "-V" => {
             println!("veilux {VERSION} ({PROTOCOL_VERSION})");
             Ok(())
         }
         other => {
             eprintln!(
-                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent node (default dir ./veilux-data)\n  veilux version       print version"
+                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR]\n  veilux version       print version"
             );
             std::process::exit(1);
         }
     }
+}
+
+fn cmd_validator(args: &[String]) -> Result<()> {
+    let get = |flag: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == flag)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let name = get("--name").unwrap_or_else(|| "validator-0".to_string());
+    let seed_str = get("--seed").unwrap_or_else(|| name.clone());
+    let listen = get("--listen").unwrap_or_else(|| "127.0.0.1:30420".to_string());
+    let datadir = get("--datadir").unwrap_or_else(|| format!("./veilux-data-{name}"));
+    let interval = get("--interval")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3u64);
+
+    let bootstrap: Vec<String> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--bootstrap")
+        .filter_map(|(i, _)| args.get(i + 1).cloned())
+        .collect();
+
+    let peers: Vec<(String, [u8; 32])> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--peer")
+        .filter_map(|(i, _)| args.get(i + 1))
+        .filter_map(|spec| {
+            let (n, s) = spec.split_once(':')?;
+            Some((n.to_string(), seed_from(s)))
+        })
+        .collect();
+
+    let cfg = validator_loop::ValidatorConfig {
+        name,
+        seed: seed_from(&seed_str),
+        datadir,
+        listen_addr: listen,
+        bootstrap,
+        peers,
+        block_interval_secs: interval,
+    };
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(validator_loop::run_validator(cfg))
+}
+
+fn seed_from(s: &str) -> [u8; 32] {
+    let mut seed = [0u8; 32];
+    let bytes = s.as_bytes();
+    for (i, b) in bytes.iter().enumerate().take(32) {
+        seed[i] = *b;
+    }
+    if bytes.is_empty() {
+        seed[0] = 1;
+    }
+    seed
 }
 
 fn print_banner() {

@@ -65,7 +65,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(proposer: PartyId, cascade: Cascade) -> Self {
-        let genesis = Block::genesis(proposer.clone(), now());
+        let genesis = Block::deterministic_genesis();
         Node {
             cascade,
             state: StateTree::new(),
@@ -169,16 +169,21 @@ impl Node {
         if self.mempool.is_empty() {
             return Err(NodeError::EmptyMempool);
         }
+        let block = self.assemble_block()?;
+        self.commit_block(block)
+    }
 
+    /// Assemble a block from the mempool: apply commands to state and return the
+    /// proposal block (not yet projected or persisted). Used by the proposer in
+    /// the multi-node consensus path before broadcasting.
+    pub fn assemble_block(&mut self) -> Result<Block, NodeError> {
         let parent = self.head().clone();
         let take = self.mempool.len().min(self.limits.max_block_commands);
         let commands: Vec<Command> = self.mempool.drain(..take).collect();
 
         let mut all_events = Vec::new();
-        let mut total_cost = 0u64;
         for cmd in commands {
             let receipt = self.cascade.apply(cmd, &mut self.state)?;
-            total_cost += receipt.total_cost;
             all_events.extend(receipt.events);
         }
 
@@ -192,7 +197,12 @@ impl Node {
             events: all_events,
         };
         block.events_root = block.compute_events_root();
+        Ok(block)
+    }
 
+    /// Commit an assembled/agreed block: project into sub-ledgers, append to the
+    /// chain, and persist. Returns a summary.
+    pub fn commit_block(&mut self, block: Block) -> Result<BlockSummary, NodeError> {
         let projection = project_block(&block, &self.keyrings)?;
         let mut delivered = 0usize;
         for keyring in &self.keyrings {
@@ -210,7 +220,7 @@ impl Node {
             events: block.events.len(),
             events_root: block.events_root,
             state_root: block.state_root,
-            total_cost,
+            total_cost: 0,
             views_delivered: delivered,
         };
 
@@ -227,6 +237,26 @@ impl Node {
         }
 
         Ok(summary)
+    }
+
+    /// Accept a block finalized elsewhere (non-proposer fast-path). Appends and
+    /// persists if it extends our head. State re-execution for non-proposers is
+    /// a documented follow-up; this keeps the chain head consistent.
+    pub fn accept_external_block(&mut self, block: Block) -> Result<bool, NodeError> {
+        if block.parent != self.head().hash() || block.height != self.head().height + 1 {
+            return Ok(false);
+        }
+        if self.blocks.iter().any(|b| b.hash() == block.hash()) {
+            return Ok(false);
+        }
+        self.blocks.push(block);
+        if let Some(store) = &self.store {
+            let last = self.blocks.last().expect("just pushed");
+            store
+                .append_block(last)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+        Ok(true)
     }
 
     pub fn sub_ledger(&self, party: &PartyId) -> Option<&SubLedger> {

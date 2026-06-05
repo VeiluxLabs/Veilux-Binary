@@ -21,7 +21,9 @@ Status legend: ✅ implemented · 🔜 next.
 | **Persistence (store)** | ✅ | append-only block log + atomic state snapshots; chain reloads on restart |
 | **Network layer** | ✅ | lightweight TCP gossip transport for blocks, votes, and commands (no heavy libp2p) |
 | **`token` Prism** | ✅ | fungible LUX-style accounts, transfers, mint/burn |
-| Multi-validator live finality loop | 🔜 | wire votes across nodes into the Aurora engine for real multi-node finality |
+| **Multi-validator live finality** | ✅ | networked BFT: proposer broadcasts proposal, validators prevote→precommit, blocks finalize at 2/3+ across nodes (verified live with 3 validators) |
+| Proposer failover (round change) | 🔜 | leader rotation when the height proposer is offline |
+| State re-execution for non-proposers | 🔜 | non-proposers currently fast-accept the agreed block; full re-execution from block contents is next |
 | Block/view sync on join | 🔜 | `RequestBlocks` handler to catch a new node up to head |
 
 ---

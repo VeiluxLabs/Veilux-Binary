@@ -125,16 +125,45 @@ received by the other over real TCP.
      └───────────┘
 ```
 
-Single-node persistent operation is implemented today (`veilux run`).
-Multi-node live finality (wiring votes across the network into Aurora) is the
-next step — see `docs/roadmap.md` Tier 0.
+Single-node persistent operation (`veilux run`) and **multi-node live BFT
+finality** (`veilux validator`) are both implemented today. State re-execution
+for non-proposers and proposer failover are the next steps — see
+`docs/roadmap.md` Tier 0.
 
 ---
 
-## 5. Try it
+## 5. Run it
+
+### Single persistent node
 
 ```bash
 cargo run --bin veilux -- run ./veilux-data   # produce + persist a block
 cargo run --bin veilux -- run ./veilux-data   # reloads chain, grows it
+```
+
+### Live 3-validator network (multi-node finality)
+
+Open three terminals (shared seed strings so every node derives the same
+validator public keys):
+
+```bash
+veilux validator --name v1 --seed v1seed --listen 127.0.0.1:33001 \
+  --peer v2:v2seed --peer v3:v3seed --datadir ./d1 \
+  --bootstrap 127.0.0.1:33002 --bootstrap 127.0.0.1:33003
+
+veilux validator --name v2 --seed v2seed --listen 127.0.0.1:33002 \
+  --peer v1:v1seed --peer v3:v3seed --datadir ./d2 \
+  --bootstrap 127.0.0.1:33001 --bootstrap 127.0.0.1:33003
+
+veilux validator --name v3 --seed v3seed --listen 127.0.0.1:33003 \
+  --peer v1:v1seed --peer v2:v2seed --datadir ./d3 \
+  --bootstrap 127.0.0.1:33001 --bootstrap 127.0.0.1:33002
+```
+
+You'll see `block committed by BFT quorum ... power=300 quorum=201` and all
+three data directories grow the chain in lockstep with byte-identical blocks.
+
+```bash
 cargo test -p veilux-consensus -p veilux-store -p veilux-network
+cargo test -p veilux-node driver   # deterministic 4-validator finality test
 ```

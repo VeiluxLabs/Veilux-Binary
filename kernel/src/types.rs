@@ -164,4 +164,16 @@ impl Block {
             events: vec![],
         }
     }
+
+    pub fn deterministic_genesis() -> Self {
+        Block {
+            height: 0,
+            parent: Hash::ZERO,
+            events_root: Hash::ZERO,
+            state_root: Hash::ZERO,
+            timestamp: 0,
+            proposer: PartyId::new("genesis"),
+            events: vec![],
+        }
+    }
 }

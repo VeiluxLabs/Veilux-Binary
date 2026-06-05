@@ -39,6 +39,8 @@ pub enum ConsensusError {
     BadHeight { expected: u64, got: u64 },
     #[error("events root mismatch")]
     EventsRootMismatch,
+    #[error("bad vote signature: {0}")]
+    BadVoteSignature(String),
     #[error(transparent)]
     Vote(#[from] VoteError),
 }
@@ -114,6 +116,12 @@ impl Aurora {
     pub fn add_vote(&mut self, vote: &Vote) -> Result<CommitOutcome, ConsensusError> {
         if self.committed.contains_key(&vote.height) {
             return Ok(CommitOutcome::AlreadyCommitted);
+        }
+        if let Some(v) = self.validators.get(&vote.voter) {
+            if !vote.signature.is_empty() {
+                veilux_veil::verify_bytes(&v.public_key, &vote.signing_bytes(), &vote.signature)
+                    .map_err(|e| ConsensusError::BadVoteSignature(e.to_string()))?;
+            }
         }
         let vset = &self.validators;
         let quorum = vset.quorum_threshold();

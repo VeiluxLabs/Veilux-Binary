@@ -56,6 +56,30 @@ impl PartyIdentity {
             signature: sig.to_bytes().to_vec(),
         }
     }
+
+    pub fn sign_bytes(&self, message: &[u8]) -> Vec<u8> {
+        let sig: Signature = self.signing_key.sign(message);
+        sig.to_bytes().to_vec()
+    }
+}
+
+pub fn verify_bytes(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), IdentityError> {
+    let pk_bytes: [u8; 32] = public_key
+        .try_into()
+        .map_err(|_| IdentityError::BadPublicKey)?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&pk_bytes).map_err(|_| IdentityError::BadPublicKey)?;
+    let sig_bytes: [u8; 64] = signature
+        .try_into()
+        .map_err(|_| IdentityError::BadSignature)?;
+    let signature = Signature::from_bytes(&sig_bytes);
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|_| IdentityError::VerificationFailed)
 }
 
 pub fn verify_signed(signed: &SignedCommand) -> Result<(), IdentityError> {

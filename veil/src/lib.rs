@@ -5,7 +5,7 @@ pub mod projection;
 pub mod view;
 
 pub use disclosure::{audit_open, grant_disclosure, AuditableEntry, DisclosureGrant, GrantScope};
-pub use identity::{verify_signed, IdentityError, PartyIdentity};
+pub use identity::{verify_bytes, verify_signed, IdentityError, PartyIdentity};
 pub use ledger::{SubLedger, SubLedgerEntry};
 pub use projection::{project_block, Projection};
 pub use view::{EncryptedView, ViewError, ViewKeyring};
