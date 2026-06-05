@@ -167,3 +167,61 @@ impl BlockNotification {
 pub fn hash_hex(h: &Hash) -> String {
     h.to_hex()
 }
+
+// ---- Explorer namespace types ----
+
+/// Chain-wide statistics for dashboards.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChainStats {
+    pub height: u64,
+    pub total_blocks: u64,
+    pub total_commands: u64,
+    pub total_events: u64,
+    pub head_hash: String,
+    pub state_root: String,
+    pub state_entries: usize,
+    /// Event counts grouped by prism name.
+    pub events_by_prism: std::collections::BTreeMap<String, u64>,
+}
+
+/// A decoded event entry surfaced by the explorer.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EventView {
+    pub block_height: u64,
+    pub prism: String,
+    pub commitment: String,
+    pub source_command: String,
+    /// Visibility shape: "public" or "parties".
+    pub visibility: String,
+    /// JSON payload if it decodes as JSON, else hex bytes.
+    pub payload_json: Option<serde_json::Value>,
+    pub payload_hex: Option<String>,
+}
+
+/// Result of locating a command across the chain.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommandLocation {
+    pub found: bool,
+    pub command_id: String,
+    pub block_height: Option<u64>,
+    pub block_hash: Option<String>,
+    pub prism: Option<String>,
+    pub submitter: Option<String>,
+    /// Events produced by this command.
+    pub events: Vec<EventView>,
+}
+
+/// A single state entry (key + hex value) for prefix listings.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateEntry {
+    pub key: String,
+    pub value_hex: String,
+}
+
+/// Paginated list of state entries under a prefix.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StatePrefixResult {
+    pub prefix: String,
+    pub total: usize,
+    pub entries: Vec<StateEntry>,
+}

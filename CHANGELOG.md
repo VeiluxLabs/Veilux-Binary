@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Explorer API** — a read-heavy `explorer_*` JSON-RPC namespace for indexers,
+  block explorers, and dashboards: `explorer_stats` (chain totals + per-prism
+  event breakdown), `explorer_recentBlocks`, `explorer_blockByHash`,
+  `explorer_searchCommand` (locate a command and its events),
+  `explorer_listByPrism`, and `explorer_statePrefix` (list state under a key
+  prefix). Surfaced in both the Rust and TypeScript SDKs.
 - **Bridge Prism** (`prisms/bridge`) — guardian-attested cross-chain transfers
   to Cosmos, Solana, Ethereum, or a custom chain. Register a guardian set with a
   signature quorum; lock tokens outbound (`send`) and redeem guardian-attested

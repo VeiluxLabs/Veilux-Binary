@@ -80,6 +80,8 @@ default.**
 **Developer experience:**
 
 - **JSON-RPC API** (`veilux serve`) — a local dev node, like Anvil/Ganache
+- **Explorer API** — `explorer_*` query endpoints (stats, blocks, command search,
+  per-prism events, state prefix) for indexers and dashboards
 - **WebSocket subscriptions** — real-time block notifications
 - **SDKs** — Rust (`veilux-sdk`) and TypeScript (`@veilux/sdk`, on npm), with
   byte-compatible signing so clients in either language verify on-chain

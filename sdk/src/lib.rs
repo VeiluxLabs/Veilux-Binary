@@ -28,7 +28,8 @@ use serde_json::json;
 
 pub use veilux_kernel::{Command, Hash, PartyId, SignedCommand, Visibility};
 pub use veilux_rpc::types::{
-    BlockView, EstimateResult, NodeInfo, StateResult, SubmitParams, SubmitResult,
+    BlockView, ChainStats, CommandLocation, EstimateResult, EventView, NodeInfo, StateEntry,
+    StatePrefixResult, StateResult, SubmitParams, SubmitResult,
 };
 pub use veilux_rpc::{method, RpcRequest, RpcResponse};
 pub use veilux_veil::PartyIdentity;
@@ -117,6 +118,55 @@ impl Client {
     /// Submit a signed command to the node's mempool.
     pub fn submit(&self, command: &SignedCommand) -> Result<SubmitResult, SdkError> {
         self.call(method::SUBMIT, json!({ "command": command }))
+    }
+
+    // ---- Explorer queries ----
+
+    /// Chain-wide statistics (height, totals, per-prism event breakdown).
+    pub fn explorer_stats(&self) -> Result<ChainStats, SdkError> {
+        self.call(method::EXPLORER_STATS, json!({}))
+    }
+
+    /// The most recent blocks, newest first.
+    pub fn explorer_recent_blocks(&self, limit: u64) -> Result<Vec<BlockView>, SdkError> {
+        self.call(method::EXPLORER_RECENT_BLOCKS, json!({ "limit": limit }))
+    }
+
+    /// Look up a block by its hash.
+    pub fn explorer_block_by_hash(&self, hash: &str) -> Result<BlockView, SdkError> {
+        self.call(method::EXPLORER_BLOCK_BY_HASH, json!({ "hash": hash }))
+    }
+
+    /// Locate a command by id and return its block + produced events.
+    pub fn explorer_search_command(&self, command_id: &str) -> Result<CommandLocation, SdkError> {
+        self.call(
+            method::EXPLORER_SEARCH_COMMAND,
+            json!({ "command_id": command_id }),
+        )
+    }
+
+    /// Recent events emitted by a given Prism.
+    pub fn explorer_list_by_prism(
+        &self,
+        prism: &str,
+        limit: u64,
+    ) -> Result<Vec<EventView>, SdkError> {
+        self.call(
+            method::EXPLORER_LIST_BY_PRISM,
+            json!({ "prism": prism, "limit": limit }),
+        )
+    }
+
+    /// List state entries under a key prefix (e.g. "token/meta/").
+    pub fn explorer_state_prefix(
+        &self,
+        prefix: &str,
+        limit: u64,
+    ) -> Result<StatePrefixResult, SdkError> {
+        self.call(
+            method::EXPLORER_STATE_PREFIX,
+            json!({ "prefix": prefix, "limit": limit }),
+        )
     }
 }
 

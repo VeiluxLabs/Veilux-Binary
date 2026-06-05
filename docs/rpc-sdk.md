@@ -31,6 +31,12 @@ Transport: HTTP POST, JSON-RPC 2.0, `Content-Type: application/json`.
 | `veilux_getState` | `{ "key": string }` | `{ found, value_hex }` |
 | `veilux_estimate` | `{ "command": SignedCommand }` | `{ cost }` |
 | `veilux_submit` | `{ "command": SignedCommand }` | `{ accepted, command_id, mempool_len }` |
+| `explorer_stats` | `{}` | chain stats: totals + per-prism event counts |
+| `explorer_recentBlocks` | `{ "limit": u64 }` | newest blocks first |
+| `explorer_blockByHash` | `{ "hash": string }` | a block by hash |
+| `explorer_searchCommand` | `{ "command_id": string }` | locate a command + its events |
+| `explorer_listByPrism` | `{ "prism": string, "limit": u64 }` | recent events from a prism |
+| `explorer_statePrefix` | `{ "prefix": string, "limit": u64 }` | state entries under a key prefix |
 
 ### Example
 
@@ -189,6 +195,34 @@ const sub = subscribeBlocks("ws://127.0.0.1:8646", {
 Works in browsers and Node.js (Node 20 needs `--experimental-websocket`; Node 21+
 has it by default). The server speaks RFC 6455 with a featherweight handshake +
 text framing — no external WebSocket library.
+
+---
+
+## 3d. Explorer queries (indexers & dashboards)
+
+Both SDKs expose the `explorer_*` methods for read-heavy data access:
+
+```ts
+const stats = await client.explorerStats();        // height, totals, per-prism counts
+const blocks = await client.recentBlocks(20);       // newest blocks first
+const block = await client.blockByHash("0x..");
+const loc = await client.searchCommand("0x..");     // which block + events for a command
+const events = await client.listByPrism("token", 50);
+const tokens = await client.statePrefix("token/meta/", 100);
+```
+
+Rust:
+
+```rust
+let stats = client.explorer_stats()?;
+let blocks = client.explorer_recent_blocks(20)?;
+let loc = client.explorer_search_command("0x..")?;
+let events = client.explorer_list_by_prism("bridge", 50)?;
+let tokens = client.explorer_state_prefix("token/meta/", 100)?;
+```
+
+These power block explorers, wallet history views, and analytics dashboards
+without each app re-indexing the chain itself.
 
 ---
 

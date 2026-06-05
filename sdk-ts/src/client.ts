@@ -1,9 +1,13 @@
 import {
   RPC_METHODS,
   type BlockView,
+  type ChainStats,
+  type CommandLocation,
   type EstimateResult,
+  type EventView,
   type NodeInfo,
   type SignedCommand,
+  type StatePrefixResult,
   type StateResult,
   type SubmitResult,
 } from "./types.js";
@@ -106,5 +110,37 @@ export class Client {
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
+  }
+
+  // ---- Explorer queries ----
+
+  /** Chain-wide statistics for dashboards. */
+  explorerStats(): Promise<ChainStats> {
+    return this.call(RPC_METHODS.explorerStats, {});
+  }
+
+  /** The most recent blocks, newest first. */
+  recentBlocks(limit = 20): Promise<BlockView[]> {
+    return this.call(RPC_METHODS.explorerRecentBlocks, { limit });
+  }
+
+  /** Look up a block by its hash. */
+  blockByHash(hash: string): Promise<BlockView> {
+    return this.call(RPC_METHODS.explorerBlockByHash, { hash });
+  }
+
+  /** Locate a command by id and return its block + produced events. */
+  searchCommand(commandId: string): Promise<CommandLocation> {
+    return this.call(RPC_METHODS.explorerSearchCommand, { command_id: commandId });
+  }
+
+  /** Recent events emitted by a given Prism (e.g. "token", "bridge"). */
+  listByPrism(prism: string, limit = 50): Promise<EventView[]> {
+    return this.call(RPC_METHODS.explorerListByPrism, { prism, limit });
+  }
+
+  /** List state entries under a key prefix (e.g. "token/meta/"). */
+  statePrefix(prefix: string, limit = 100): Promise<StatePrefixResult> {
+    return this.call(RPC_METHODS.explorerStatePrefix, { prefix, limit });
   }
 }

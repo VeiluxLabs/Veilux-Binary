@@ -30,4 +30,12 @@ pub mod method {
     pub const GET_BLOCK_BY_NUMBER: &str = "veilux_getBlockByNumber";
     pub const GET_STATE: &str = "veilux_getState";
     pub const ESTIMATE: &str = "veilux_estimate";
+
+    // Explorer namespace — read-heavy queries for indexers and dashboards.
+    pub const EXPLORER_STATS: &str = "explorer_stats";
+    pub const EXPLORER_RECENT_BLOCKS: &str = "explorer_recentBlocks";
+    pub const EXPLORER_BLOCK_BY_HASH: &str = "explorer_blockByHash";
+    pub const EXPLORER_SEARCH_COMMAND: &str = "explorer_searchCommand";
+    pub const EXPLORER_LIST_BY_PRISM: &str = "explorer_listByPrism";
+    pub const EXPLORER_STATE_PREFIX: &str = "explorer_statePrefix";
 }

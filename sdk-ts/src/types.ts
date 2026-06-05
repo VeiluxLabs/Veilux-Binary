@@ -85,4 +85,54 @@ export const RPC_METHODS = {
   getBlockByNumber: "veilux_getBlockByNumber",
   getState: "veilux_getState",
   estimate: "veilux_estimate",
+  explorerStats: "explorer_stats",
+  explorerRecentBlocks: "explorer_recentBlocks",
+  explorerBlockByHash: "explorer_blockByHash",
+  explorerSearchCommand: "explorer_searchCommand",
+  explorerListByPrism: "explorer_listByPrism",
+  explorerStatePrefix: "explorer_statePrefix",
 } as const;
+
+// ---- Explorer types ----
+
+export interface ChainStats {
+  height: number;
+  total_blocks: number;
+  total_commands: number;
+  total_events: number;
+  head_hash: string;
+  state_root: string;
+  state_entries: number;
+  events_by_prism: Record<string, number>;
+}
+
+export interface EventView {
+  block_height: number;
+  prism: string;
+  commitment: string;
+  source_command: string;
+  visibility: string;
+  payload_json: unknown | null;
+  payload_hex: string | null;
+}
+
+export interface CommandLocation {
+  found: boolean;
+  command_id: string;
+  block_height: number | null;
+  block_hash: string | null;
+  prism: string | null;
+  submitter: string | null;
+  events: EventView[];
+}
+
+export interface StateEntry {
+  key: string;
+  value_hex: string;
+}
+
+export interface StatePrefixResult {
+  prefix: string;
+  total: number;
+  entries: StateEntry[];
+}
