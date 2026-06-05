@@ -1,0 +1,12 @@
+[package]
+name = "prism-confidential"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "VEILUX confidential token Prism — hidden balances via commitments, with selective auditor disclosure"
+
+[dependencies]
+veilux-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true

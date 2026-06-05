@@ -21,6 +21,13 @@ const META_PREFIX: &str = "token/meta/";
 const BAL_PREFIX: &str = "token/bal/";
 const ALLOW_PREFIX: &str = "token/allow/";
 
+/// Deterministic, well-known id of the chain's native token (LUX). The genesis
+/// process seeds this token's metadata and initial allocations; staking, fees,
+/// and rewards all operate on it.
+pub fn native_token_id() -> Hash {
+    Hash::commit("veilux/native-token", &[])
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TokenMeta {
     pub token_id: Hash,
@@ -484,6 +491,116 @@ pub fn transfer_command(
 
 pub fn balance_of(state: &StateTree, token_id: &Hash, who: &PartyId) -> u128 {
     TokenPrism::balance(state, token_id, who)
+}
+
+/// Read a token's metadata (None if it does not exist).
+pub fn token_meta(state: &StateTree, token_id: &Hash) -> Option<TokenMeta> {
+    state
+        .get_json::<TokenMeta>(&TokenPrism::meta_key(token_id))
+        .ok()
+        .flatten()
+}
+
+/// Credit `amount` to `who` for `token_id` and grow total supply. For use by
+/// trusted in-process modules (genesis, staking rewards, fee distribution) — not
+/// reachable from untrusted command input.
+pub fn credit(
+    state: &mut StateTree,
+    token_id: &Hash,
+    who: &PartyId,
+    amount: u128,
+) -> Result<(), PrismError> {
+    let bal = TokenPrism::balance(state, token_id, who);
+    TokenPrism::set_balance(
+        state,
+        token_id,
+        who,
+        bal.checked_add(amount)
+            .ok_or_else(|| PrismError::Internal("balance overflow".into()))?,
+    )?;
+    if let Some(mut meta) = token_meta(state, token_id) {
+        meta.total_supply = meta.total_supply.saturating_add(amount);
+        state
+            .put_json(TokenPrism::meta_key(token_id), &meta)
+            .map_err(|e| PrismError::Internal(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Debit `amount` from `who` for `token_id` (does not touch total supply; the
+/// value is assumed to move elsewhere, e.g. a staking escrow). Returns an error
+/// if the balance is insufficient.
+pub fn debit(
+    state: &mut StateTree,
+    token_id: &Hash,
+    who: &PartyId,
+    amount: u128,
+) -> Result<(), PrismError> {
+    let bal = TokenPrism::balance(state, token_id, who);
+    if bal < amount {
+        return Err(PrismError::LimitExceeded("insufficient balance".into()));
+    }
+    TokenPrism::set_balance(state, token_id, who, bal - amount)
+}
+
+/// Move `amount` of `token_id` from `from` to `to` atomically.
+pub fn move_balance(
+    state: &mut StateTree,
+    token_id: &Hash,
+    from: &PartyId,
+    to: &PartyId,
+    amount: u128,
+) -> Result<(), PrismError> {
+    debit(state, token_id, from, amount)?;
+    let to_bal = TokenPrism::balance(state, token_id, to);
+    TokenPrism::set_balance(
+        state,
+        token_id,
+        to,
+        to_bal
+            .checked_add(amount)
+            .ok_or_else(|| PrismError::Internal("balance overflow".into()))?,
+    )
+}
+
+/// Seed the native token's metadata and initial allocations at genesis. Safe to
+/// call once on an empty chain; does nothing if the native token already exists.
+pub fn seed_native_token(
+    state: &mut StateTree,
+    name: &str,
+    symbol: &str,
+    decimals: u8,
+    treasury: &PartyId,
+    allocations: &[(PartyId, u128)],
+) -> Result<Hash, PrismError> {
+    let token_id = native_token_id();
+    if state.contains(&TokenPrism::meta_key(&token_id)) {
+        return Ok(token_id);
+    }
+    let total: u128 = allocations.iter().map(|(_, a)| *a).sum();
+    let meta = TokenMeta {
+        token_id,
+        name: name.to_string(),
+        symbol: symbol.to_string(),
+        decimals,
+        total_supply: total,
+        owner: treasury.clone(),
+        mintable: true,
+    };
+    state
+        .put_json(TokenPrism::meta_key(&token_id), &meta)
+        .map_err(|e| PrismError::Internal(e.to_string()))?;
+    for (who, amount) in allocations {
+        let cur = TokenPrism::balance(state, &token_id, who);
+        TokenPrism::set_balance(
+            state,
+            &token_id,
+            who,
+            cur.checked_add(*amount)
+                .ok_or_else(|| PrismError::Internal("allocation overflow".into()))?,
+        )?;
+    }
+    Ok(token_id)
 }
 
 #[cfg(test)]

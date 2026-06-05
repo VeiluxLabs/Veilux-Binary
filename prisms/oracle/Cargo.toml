@@ -1,0 +1,14 @@
+[package]
+name = "prism-oracle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "VEILUX oracle Prism — quorum-attested external data feeds (prices, AI outputs, off-chain facts)"
+
+[dependencies]
+veilux-kernel.workspace = true
+veilux-veil.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true

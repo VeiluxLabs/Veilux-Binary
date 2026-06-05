@@ -323,6 +323,133 @@ kernel change.
 
 ---
 
+## Prism: `staking` — Staking & Governance
+
+**Crate:** `prisms/staking` · **Routing name:** `staking` · **Version:** 1.0
+
+### Purpose
+Turn the validator set into an economic system: bond the native token (LUX) as
+stake, delegate to others, and run **stake-weighted on-chain governance**
+(proposals + voting). Staked value is escrowed in a reserved account and is
+unspendable until unstaked.
+
+### State layout
+
+| Key | Value |
+|-----|-------|
+| `staking/stake/<party>` | JSON `StakeRecord { self_bonded, delegated_in }` |
+| `staking/delegation/<delegator>/<validator>` | delegated amount (decimal string) |
+| `gov/proposal/<id>` | JSON `Proposal` (status, yes/no power, deadline) |
+| `gov/vote/<id>/<voter>` | the voter's choice (anti double-vote) |
+
+### Commands (`StakingCommand`)
+
+```jsonc
+{ "op": "stake",       "amount": "1000" }
+{ "op": "unstake",     "amount": "250" }
+{ "op": "delegate",    "validator": "alice", "amount": "300" }
+{ "op": "undelegate",  "validator": "alice", "amount": "100" }
+{ "op": "propose",     "title": "raise block size", "description": "...", "voting_period": 100 }
+{ "op": "vote",        "proposal_id": "0x...", "approve": true }
+{ "op": "finalize",    "proposal_id": "0x..." }
+```
+
+### Rules & gas
+- `stake`/`delegate` move native LUX into the `staking/escrow` account;
+  `unstake`/`undelegate` move it back. Total supply is unchanged.
+- Voting power = `self_bonded + delegated_in`; votes are weighted by it.
+- Only bonded stakers may open proposals; each party votes once per proposal;
+  proposals finalize as `passed`/`rejected` after the voting period.
+- Block height is appended to the command payload by the node so the prism has a
+  deterministic notion of "now" without reading a clock.
+- Gas: stake/unstake 3,000 · delegate/undelegate 3,500 · propose 5,000 · vote
+  2,000 · finalize 2,500.
+
+---
+
+## Prism: `oracle` — Quorum-Attested Data Feeds
+
+**Crate:** `prisms/oracle` · **Routing name:** `oracle` · **Version:** 1.0
+
+### Purpose
+Bring trusted off-chain data on-chain (asset prices, large AI model outputs,
+real-world facts) via a **reporter quorum**: a feed defines a fixed reporter set
+and a signature threshold, and a value update is accepted only when enough
+reporters sign its digest. Same honest trust model as the Bridge guardians.
+
+### State layout
+
+| Key | Value |
+|-----|-------|
+| `oracle/feed/<feed_id>` | JSON `Feed` (reporters, quorum, round) |
+| `oracle/value/<feed_id>` | JSON `FeedValue` (latest accepted value + round) |
+
+### Commands (`OracleCommand`)
+
+```jsonc
+{ "op": "register_feed", "name": "BTC/USD", "reporters": ["<hex pubkey>", ...], "quorum": 2 }
+{ "op": "report", "feed_id": "0x...", "round": 1, "value": [ ...bytes... ],
+  "signatures": [{ "public_key": "<hex>", "signature": "<hex>" }, ...] }
+```
+
+### Rules & gas
+- Reporters sign `H("veilux/oracle/report/v1" ‖ feed_id ‖ round ‖ value)`.
+- A report is accepted only with `>= quorum` valid, non-duplicate reporter
+  signatures; rounds must strictly advance (anti-replay).
+- The value is opaque bytes — a fixed-point price, a JSON blob, or a model hash.
+- Gas: register 5,000 · report 6,000.
+
+---
+
+## Prism: `confidential` — Confidential Token (hidden balances)
+
+**Crate:** `prisms/confidential` · **Routing name:** `confidential` · **Version:** 1.0
+
+### Purpose
+A privacy-preserving token where **amounts and balances never appear on the
+public ledger**. It uses a shielded **note** model (Zcash-style): the public
+state holds only note *commitments* and whether each is spent. Amounts and
+owners live inside the commitment and travel to stakeholders through the Veil
+encrypted view (`Visibility::Parties`).
+
+### State layout
+
+| Key | Value |
+|-----|-------|
+| `confidential/token/<token_id>` | JSON `ConfTokenMeta` (name, symbol, admin) |
+| `confidential/note/<commitment>` | JSON `NoteState { token_id, spent }` |
+
+### Commands (`ConfidentialCommand`)
+
+```jsonc
+{ "op": "create_token", "name": "Private Dollar", "symbol": "pUSD" }
+{ "op": "mint",     "token_id": "0x...", "opening": { "owner": "alice", "amount": "1000", "blinding": "<hex>" } }
+{ "op": "transfer", "token_id": "0x...",
+  "input":   { "owner": "alice", "amount": "1000", "blinding": "r1" },
+  "outputs": [ { "owner": "bob", "amount": "700", "blinding": "r2" },
+               { "owner": "alice", "amount": "300", "blinding": "r3" } ] }
+```
+
+### How it works
+- `commitment = H("veilux/conf/note" ‖ token ‖ owner ‖ amount ‖ blinding)`.
+  The random `blinding` hides the amount; the hash binds it.
+- `transfer` spends one note and creates outputs; the prism checks the input
+  opening matches an unspent note, the spender owns it, and **outputs conserve
+  value** (sum of outputs = input). The input is then nullified.
+- **Selective disclosure:** an owner can hand an auditor `(token_id, opening)`;
+  `disclose_note` confirms the hidden amount/owner against the on-chain
+  commitment without revealing anything else.
+
+### Trust boundary (honest note)
+Public observers learn only *that* notes exist and which are spent — never
+amounts, balances, or who owns what (those are sealed to stakeholders by Veil).
+Validators that execute a confidential `transfer` do see the openings in the
+command they process; making amounts blind to validators too is the
+**ZK Coprocessor Prism** roadmap item (prove conservation in zero-knowledge).
+Gas: create 5,000 · mint 4,000 · transfer 8,000.
+
+---
+
 ## Writing your own Prism
 
 ```rust

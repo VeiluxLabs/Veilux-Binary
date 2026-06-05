@@ -24,6 +24,8 @@ pub struct ValidatorConfig {
     pub secure: bool,
     /// Source IPs allowed to dial this node (empty = any, key auth still on).
     pub ip_allowlist: Vec<std::net::IpAddr>,
+    /// Optional genesis spec; seeds the native token on a fresh chain.
+    pub genesis: Option<crate::genesis::ChainSpec>,
 }
 
 const VIEW_TIMEOUT_TICKS: u32 = 3;
@@ -96,11 +98,30 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         .install(Box::new(prism_nft::NftPrism::new()))
         .install(Box::new(prism_contract::ContractPrism::new()))
         .install(Box::new(prism_ai::AiPrism::new()))
-        .install(Box::new(prism_bridge::BridgePrism::new()));
+        .install(Box::new(prism_bridge::BridgePrism::new()))
+        .install(Box::new(prism_staking::StakingPrism::new()))
+        .install(Box::new(prism_oracle::OraclePrism::new()))
+        .install(Box::new(prism_confidential::ConfidentialPrism::new()));
 
     let store = Store::open(&cfg.datadir)?;
-    let node =
+    let mut node =
         Node::with_store(me.clone(), cascade, store).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    if let Some(spec) = &cfg.genesis {
+        let seeded = node
+            .seed_genesis_state(|state| {
+                spec.seed(state)
+                    .map_err(|e| crate::node::NodeError::Store(e.to_string()))
+            })
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        if seeded {
+            info!(
+                token = %spec.token_symbol,
+                supply = %spec.total_supply_whole(),
+                "genesis native token seeded"
+            );
+        }
+    }
 
     let vset = validator_set(&(cfg.name.clone(), cfg.seed), &cfg.peers);
     let aurora = Aurora::new(ConsensusConfig::default(), vset.clone(), Some(me.clone()));

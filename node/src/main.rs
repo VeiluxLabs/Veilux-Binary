@@ -1,4 +1,5 @@
 mod driver;
+mod genesis;
 mod node;
 mod rpc_service;
 mod validator_loop;
@@ -9,8 +10,11 @@ use tracing::info;
 
 use prism_ai::{infer_command, register_command, AiEvent, AiPrism, ModelKind};
 use prism_bridge::BridgePrism;
+use prism_confidential::ConfidentialPrism;
 use prism_contract::{call_command, deploy_command, vm, ContractEvent, ContractPrism};
 use prism_nft::{create_collection_command, owner_of, NftCommand, NftEvent, NftPrism};
+use prism_oracle::OraclePrism;
+use prism_staking::StakingPrism;
 use prism_storage::StoragePrism;
 use prism_token::{
     balance_of, create_command as token_create, transfer_command as token_transfer, TokenEvent,
@@ -92,16 +96,45 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .install(Box::new(TokenPrism::new()))
         .install(Box::new(NftPrism::new()))
         .install(Box::new(ContractPrism::new()))
-        .install(Box::new(BridgePrism::new()));
+        .install(Box::new(BridgePrism::new()))
+        .install(Box::new(StakingPrism::new()))
+        .install(Box::new(OraclePrism::new()))
+        .install(Box::new(ConfidentialPrism::new()));
 
     let store = Store::open(&datadir)?;
-    let node = Node::with_store(PartyId::new("dev-node"), cascade, store)
+    let mut node = Node::with_store(PartyId::new("dev-node"), cascade, store)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    let spec = match args
+        .iter()
+        .position(|a| a == "--genesis")
+        .and_then(|i| args.get(i + 1))
+    {
+        Some(path) => genesis::ChainSpec::load(path)?,
+        None => genesis::ChainSpec::default(),
+    };
+    let seeded = node
+        .seed_genesis_state(|state| {
+            spec.seed(state)
+                .map_err(|e| node::NodeError::Store(e.to_string()))
+        })
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     println!("VEILUX dev RPC node");
     println!("  rpc      : http://{addr}");
     println!("  ws       : ws://{ws_addr}  (block subscriptions)");
     println!("  datadir  : {datadir}");
+    println!(
+        "  token    : {} ({}), supply {} (genesis {})",
+        spec.token_name,
+        spec.token_symbol,
+        spec.total_supply_whole(),
+        if seeded {
+            "seeded now"
+        } else {
+            "already present"
+        }
+    );
     println!("  height   : #{}", node.head().height);
     println!("\nTry: curl -s http://{addr} -d '{{\"jsonrpc\":\"2.0\",\"method\":\"veilux_nodeInfo\",\"params\":{{}},\"id\":1}}'");
 
@@ -164,6 +197,15 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         .filter_map(|s| s.parse().ok())
         .collect();
 
+    let genesis = match args
+        .iter()
+        .position(|a| a == "--genesis")
+        .and_then(|i| args.get(i + 1))
+    {
+        Some(path) => Some(genesis::ChainSpec::load(path)?),
+        None => Some(genesis::ChainSpec::default()),
+    };
+
     let cfg = validator_loop::ValidatorConfig {
         name,
         seed: seed_from(&seed_str),
@@ -174,6 +216,7 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         block_interval_secs: interval,
         secure,
         ip_allowlist,
+        genesis,
     };
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -208,7 +251,10 @@ fn build_node(proposer: &str) -> Node {
         .install(Box::new(TokenPrism::new()))
         .install(Box::new(NftPrism::new()))
         .install(Box::new(ContractPrism::new()))
-        .install(Box::new(BridgePrism::new()));
+        .install(Box::new(BridgePrism::new()))
+        .install(Box::new(StakingPrism::new()))
+        .install(Box::new(OraclePrism::new()))
+        .install(Box::new(ConfidentialPrism::new()));
     Node::new(PartyId::new(proposer), cascade)
 }
 
@@ -222,7 +268,10 @@ fn cmd_run(datadir: &str) -> Result<()> {
         .install(Box::new(TokenPrism::new()))
         .install(Box::new(NftPrism::new()))
         .install(Box::new(ContractPrism::new()))
-        .install(Box::new(BridgePrism::new()));
+        .install(Box::new(BridgePrism::new()))
+        .install(Box::new(StakingPrism::new()))
+        .install(Box::new(OraclePrism::new()))
+        .install(Box::new(ConfidentialPrism::new()));
 
     let store = Store::open(datadir)?;
     let proposer = PartyId::new("validator-0");

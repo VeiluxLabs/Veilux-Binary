@@ -13,12 +13,15 @@ members = [
     "prisms/nft",
     "prisms/contract",
     "prisms/bridge",
+    "prisms/staking",
+    "prisms/oracle",
+    "prisms/confidential",
     "node",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 authors = ["nathan <nathan@winnode.xyz>"]
 license = "MIT OR Apache-2.0"
@@ -53,6 +56,9 @@ prism-token = { path = "prisms/token" }
 prism-nft = { path = "prisms/nft" }
 prism-contract = { path = "prisms/contract" }
 prism-bridge = { path = "prisms/bridge" }
+prism-staking = { path = "prisms/staking" }
+prism-oracle = { path = "prisms/oracle" }
+prism-confidential = { path = "prisms/confidential" }
 
 [profile.release]
 opt-level = "z"

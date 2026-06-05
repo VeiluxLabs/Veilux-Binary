@@ -119,6 +119,31 @@ impl Node {
         self.keyrings.push(keyring);
     }
 
+    /// True when the chain has only its genesis block and no state yet — the one
+    /// moment it is safe to seed genesis allocations.
+    pub fn is_fresh(&self) -> bool {
+        self.blocks.len() == 1 && self.state.is_empty()
+    }
+
+    /// Seed deterministic genesis state (e.g. native-token allocations) and
+    /// persist it. Only takes effect on a fresh chain; a no-op otherwise, so it
+    /// is safe to call on every startup.
+    pub fn seed_genesis_state<F>(&mut self, seeder: F) -> Result<bool, NodeError>
+    where
+        F: FnOnce(&mut StateTree) -> Result<(), NodeError>,
+    {
+        if !self.is_fresh() {
+            return Ok(false);
+        }
+        seeder(&mut self.state)?;
+        if let Some(store) = &self.store {
+            store
+                .save_state(&self.state)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+        Ok(true)
+    }
+
     pub fn head(&self) -> &Block {
         self.blocks.last().expect("chain always has genesis")
     }

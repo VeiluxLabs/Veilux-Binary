@@ -1,0 +1,11 @@
+{
+  "token_name": "Veilux",
+  "token_symbol": "LUX",
+  "token_decimals": 18,
+  "treasury": "treasury",
+  "allocations": [
+    { "party": "treasury", "amount": 700000000 },
+    { "party": "validators", "amount": 200000000 },
+    { "party": "ecosystem", "amount": 100000000 }
+  ]
+}

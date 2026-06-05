@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-06-05
+
+### Added
+- **Staking & Governance Prism** (`prisms/staking`) — turn the validator set
+  into an economic system. Bond the native token (LUX) as stake, delegate to
+  other validators, and run **stake-weighted on-chain governance**: open
+  proposals, cast weighted votes, and finalize after a voting period. Staked
+  value is escrowed (unspendable until unstaked); each party votes once per
+  proposal.
+- **Oracle Prism** (`prisms/oracle`) — bring trusted off-chain data on-chain
+  (asset prices, large AI model outputs, real-world facts) via a **reporter
+  quorum**. A feed defines a fixed reporter set and a signature threshold; a
+  value update is accepted only when enough reporters sign its digest, with
+  strictly-advancing rounds for anti-replay.
+- **Confidential Token Prism** (`prisms/confidential`) — a privacy-preserving
+  token whose **amounts and balances never appear on the public ledger**. Uses a
+  shielded note/commitment model: public state holds only note commitments and
+  spent flags, while amounts/owners ride in the Veil encrypted view. Transfers
+  are value-conserving (outputs sum to the spent note), and an owner can
+  **selectively disclose** a note's opening to an auditor without revealing
+  anything else.
+- **Configurable native token at genesis (`ChainSpec`).** A new chain chooses its
+  own token **name, symbol, decimals, and total supply** plus the initial
+  allocation distribution via a genesis JSON (`--genesis spec.json` on both
+  `veilux serve` and `veilux validator`); a sensible default is used otherwise.
+  Genesis seeding is deterministic and idempotent, so every validator sharing a
+  spec converges on byte-identical state. The token crate gained native-token
+  helpers (`native_token_id`, `seed_native_token`, `credit`/`debit`/
+  `move_balance`) reused by staking and fees.
+
 ## [0.3.3] - 2026-06-05
 
 ### Added
@@ -172,7 +202,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.0...v0.3.1

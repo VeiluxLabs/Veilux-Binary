@@ -626,7 +626,7 @@ dependencies = [
 
 [[package]]
 name = "prism-ai"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "prism-bridge"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -651,8 +651,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-confidential"
+version = "0.3.4"
+dependencies = [
+ "serde",
+ "serde_json",
+ "veilux-kernel",
+]
+
+[[package]]
 name = "prism-contract"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -664,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "prism-nft"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -675,8 +684,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-oracle"
+version = "0.3.4"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "veilux-kernel",
+ "veilux-veil",
+]
+
+[[package]]
+name = "prism-staking"
+version = "0.3.4"
+dependencies = [
+ "prism-token",
+ "serde",
+ "serde_json",
+ "veilux-kernel",
+]
+
+[[package]]
 name = "prism-storage"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -688,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "prism-token"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -1189,7 +1219,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "veilux-consensus"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -1203,7 +1233,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-kernel"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "hex",
@@ -1214,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-network"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "rand",
  "serde",
@@ -1229,14 +1259,17 @@ dependencies = [
 
 [[package]]
 name = "veilux-node"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "hex",
  "prism-ai",
  "prism-bridge",
+ "prism-confidential",
  "prism-contract",
  "prism-nft",
+ "prism-oracle",
+ "prism-staking",
  "prism-storage",
  "prism-token",
  "serde",
@@ -1255,7 +1288,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-rpc"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "hex",
  "serde",
@@ -1269,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-sdk"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "hex",
  "prism-ai",
@@ -1289,7 +1322,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-store"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -1300,7 +1333,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-veil"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake3",
  "chacha20poly1305",

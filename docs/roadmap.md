@@ -39,6 +39,8 @@ execution, data availability, and settlement are distinct layers
 | Prism | Capability | Notes |
 |-------|------------|-------|
 | **Account Abstraction Prism** | programmable accounts, gasless/sponsored tx, session keys, social recovery | Mirrors EIP-4337 / EIP-7702 direction; UX comparable to web2 ([OKX, 2025](https://www.okx.com/en-us/learn/eip-sdk-implementation)) |
+| **Staking & Governance Prism** ✅ | bond native LUX, delegate, stake-weighted on-chain proposals & voting | Shipped: escrowed stake, delegation, proposal lifecycle (`prisms/staking`). Next: slashing wired to consensus equivocation + reward distribution |
+| **Oracle Prism** ✅ | quorum-attested external data feeds (prices, AI outputs, facts) | Shipped: reporter set + signature quorum + round anti-replay (`prisms/oracle`) |
 | **Data Availability Prism** | erasure-coded blobs + DA sampling so light nodes verify availability without full download | A dedicated DA layer keeps nodes light ([OurCryptoTalk, 2025](https://ourcryptotalk.com/learn/da-layer-in-crypto-data-availability)) |
 | **ZK Coprocessor Prism** | offload heavy compute, verify a succinct proof on-chain | "Trust the math" path; complements Veil's message-based privacy |
 | **Restaking / Shared Security Prism** | let LUX stake secure external services (oracles, bridges, DA) | Programmable security as a primitive |
@@ -73,7 +75,7 @@ Builds on `docs/privacy-model.md` §7.
 | **Proof-of-Reserves Prism** | prove solvency/holdings via range proofs without revealing balances |
 | **Compliance Prism** | policy-as-code (AML/KYC thresholds, travel rule) enforced at submission, with scoped regulator grants auto-issued |
 | **Metadata-Privacy Prism** | fixed-size view padding + epoch batching to defeat size/timing analysis |
-| **Confidential Token Prism** | encrypted balances and amounts with selective auditor disclosure |
+| **Confidential Token Prism** ✅ | encrypted balances and amounts with selective auditor disclosure | Shipped: shielded note/commitment pool, value-conserving transfers, selective disclosure (`prisms/confidential`). Next: ZK proof of conservation so validators are blind to amounts too |
 
 ---
 
