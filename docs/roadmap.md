@@ -25,6 +25,7 @@ Status legend: ✅ implemented · 🔜 next.
 | **State re-execution for non-proposers** | ✅ | blocks carry their commands; every node re-executes and verifies events_root + state_root, so all nodes converge on byte-identical authenticated state |
 | **Proposer failover (view change)** | ✅ | quorum-synchronized view changes: a stalled height advances proposer only when 2/3+ stake signs a view-change, so leaders can fail without halting the chain (verified by killing the proposer mid-run) |
 | **Block sync on join** | ✅ | `RequestBlocks`/`Blocks` gossip catches a lagging or restarted node up to the network head |
+| **JSON-RPC API + Rust SDK** | ✅ | `veilux serve` exposes a JSON-RPC endpoint; `veilux-sdk` wraps it with identity, command builders, and a typed client |
 
 ---
 

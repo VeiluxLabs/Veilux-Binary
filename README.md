@@ -49,6 +49,8 @@ veilux/
 ├── consensus/         # Aurora — stake-weighted BFT (validators, votes, quorum)
 ├── store/             # append-only block log + state snapshots (persistence)
 ├── network/           # lightweight TCP gossip (blocks, votes, commands)
+├── rpc/               # JSON-RPC contract types + featherweight HTTP server
+├── sdk/               # veilux-sdk: Rust client (identity + builders + RPC)
 ├── prisms/
 │   ├── ai/            # AI Prism: model registry + inference (+ optional Ollama)
 │   ├── storage/       # Storage Prism: content-addressed blobs + pinning
@@ -122,6 +124,7 @@ cargo test --workspace         # kernel/veil/prism unit tests (all green)
 cargo run --bin veilux -- info # show kernel + installed prisms
 cargo run --bin veilux -- demo # private AI + storage + audit demo
 cargo run --bin veilux -- run  # persistent node (BFT consensus + disk store)
+cargo run --bin veilux -- serve # dev RPC node at http://127.0.0.1:8645
 ```
 
 The `run` command opens a data directory (default `./veilux-data`), loads any
@@ -142,6 +145,7 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 | `docs/architecture.md` | System design, cascade, state model |
 | `docs/add-ons.md` | Per-Prism specs (AI, Storage, Token, NFT, Contract) + how to build your own |
 | `docs/consensus-networking.md` | Aurora BFT consensus, persistence, and gossip transport |
+| `docs/rpc-sdk.md` | JSON-RPC API + Rust SDK for building applications |
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
 | `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
 | `docs/security.md` | Threat model + exploitation review + what runs safely |
@@ -181,6 +185,11 @@ Licensed under either of:
 - Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 
 at your option.
+
+## Contact
+
+- Telegram: [@Winnodexx](https://t.me/Winnodexx)
+- Email: [nathan@winnode.xyz](mailto:nathan@winnode.xyz)
 
 ## Author
 

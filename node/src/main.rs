@@ -1,5 +1,6 @@
 mod driver;
 mod node;
+mod rpc_service;
 mod validator_loop;
 mod viewsync;
 
@@ -35,6 +36,7 @@ fn main() -> Result<()> {
         "info" => cmd_info(),
         "demo" => cmd_demo(),
         "run" => cmd_run(args.get(2).map(|s| s.as_str()).unwrap_or("./veilux-data")),
+        "serve" => cmd_serve(&args),
         "validator" => cmd_validator(&args),
         "version" | "--version" | "-V" => {
             println!("veilux {VERSION} ({PROTOCOL_VERSION})");
@@ -42,11 +44,57 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!(
-                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR]\n  veilux version       print version"
+                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645)\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR]\n  veilux version       print version"
             );
             std::process::exit(1);
         }
     }
+}
+
+fn cmd_serve(args: &[String]) -> Result<()> {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    let addr = args
+        .iter()
+        .position(|a| a == "--addr")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .or_else(|| args.get(2).filter(|s| s.contains(':')).cloned())
+        .unwrap_or_else(|| "127.0.0.1:8645".to_string());
+    let datadir = args
+        .iter()
+        .position(|a| a == "--datadir")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| "./veilux-dev-data".to_string());
+
+    let mut cascade = Cascade::new();
+    cascade
+        .install(Box::new(AiPrism::new()))
+        .install(Box::new(StoragePrism::new()))
+        .install(Box::new(TokenPrism::new()))
+        .install(Box::new(NftPrism::new()))
+        .install(Box::new(ContractPrism::new()));
+
+    let store = Store::open(&datadir)?;
+    let node = Node::with_store(PartyId::new("dev-node"), cascade, store)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    println!("VEILUX dev RPC node");
+    println!("  endpoint : http://{addr}");
+    println!("  datadir  : {datadir}");
+    println!("  height   : #{}", node.head().height);
+    println!("\nTry: curl -s http://{addr} -d '{{\"jsonrpc\":\"2.0\",\"method\":\"veilux_nodeInfo\",\"params\":{{}},\"id\":1}}'");
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async move {
+        let shared = Arc::new(Mutex::new(node));
+        rpc_service::serve_rpc(shared, addr).await
+    })?;
+    Ok(())
 }
 
 fn cmd_validator(args: &[String]) -> Result<()> {

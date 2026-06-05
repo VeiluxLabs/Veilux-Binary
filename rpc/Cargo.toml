@@ -1,0 +1,20 @@
+[package]
+name = "veilux-rpc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "VEILUX RPC — shared JSON-RPC contract types and HTTP server"
+
+[features]
+default = []
+server = ["dep:tokio"]
+
+[dependencies]
+veilux-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, optional = true }

@@ -20,6 +20,7 @@ veilux-veil.workspace = true
 veilux-consensus.workspace = true
 veilux-store.workspace = true
 veilux-network.workspace = true
+veilux-rpc = { workspace = true, features = ["server"] }
 prism-ai.workspace = true
 prism-storage.workspace = true
 prism-token.workspace = true

@@ -12,6 +12,8 @@ COPY veil ./veil
 COPY consensus ./consensus
 COPY store ./store
 COPY network ./network
+COPY rpc ./rpc
+COPY sdk ./sdk
 COPY prisms ./prisms
 COPY node ./node
 
