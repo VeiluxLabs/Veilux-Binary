@@ -16,6 +16,11 @@
         <span class="brand-name">VEILUX</span>
         <span class="brand-tag">Explorer</span>
       </a>
+      <nav class="nav-tabs">
+        <a href="#/" data-tab="home">Explorer</a>
+        <a href="#/verify" data-tab="verify">Verify Contract</a>
+        <a href="#/docs" data-tab="docs">API Docs</a>
+      </nav>
       <div class="nav-search">
         <input id="navSearch" type="text" placeholder="Search by block / hash / command id" spellcheck="false" />
         <button id="navSearchBtn" aria-label="Search">
@@ -84,6 +89,55 @@
       <a class="back" href="#/">← Back to explorer</a>
       <div id="detail"></div>
     </main>
+  </div>
+
+  <div id="view-verify" class="view hidden">
+    <main class="container verify-grid">
+      <section class="panel">
+        <div class="panel-head"><h2>Verify Contract Source</h2></div>
+        <div style="padding:18px;">
+          <p class="muted" style="margin-top:0;">
+            Prove that a deployed PhotonVM contract matches its source. Submit the
+            bytecode your source compiles to; the node compares it against the
+            on-chain bytecode and, on a match, records a verification.
+          </p>
+          <div class="form-row">
+            <label for="vAddress">Contract Address (0x…)</label>
+            <input id="vAddress" type="text" spellcheck="false" placeholder="0x…" />
+          </div>
+          <div class="form-row">
+            <label for="vName">Contract Name</label>
+            <input id="vName" type="text" placeholder="MyAdder" />
+          </div>
+          <div class="form-row">
+            <label for="vCompiler">Compiler / Toolchain</label>
+            <input id="vCompiler" type="text" placeholder="photonvm-asm 1.0" />
+          </div>
+          <div class="form-row">
+            <label for="vBytecode">Compiled Bytecode (hex)</label>
+            <input id="vBytecode" type="text" spellcheck="false" placeholder="60000000000000000a…" />
+            <span class="muted" style="font-size:12px;">Tip: paste the address above and click "Load bytecode" to copy the on-chain code.</span>
+          </div>
+          <div class="form-row">
+            <label for="vSource">Source / Assembly</label>
+            <textarea id="vSource" spellcheck="false" placeholder="; PhotonVM assembly or source notes"></textarea>
+          </div>
+          <div class="form-row">
+            <label for="vAbi">ABI / Interface (optional JSON)</label>
+            <textarea id="vAbi" spellcheck="false" placeholder='{"methods":[...]}'></textarea>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button id="vLoadBtn" class="btn-sm">Load bytecode</button>
+            <button id="vSubmitBtn" class="btn-primary">Verify Contract</button>
+          </div>
+          <div id="vResult"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="view-docs" class="view hidden">
+    <main class="container docs" id="docsContent"></main>
   </div>
 
   <footer class="footer">

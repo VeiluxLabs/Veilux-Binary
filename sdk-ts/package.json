@@ -23,10 +23,10 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:examples": "tsc -p examples/tsconfig.json",
     "pretest": "tsc && tsc test/compat.test.ts --rootDir test --outDir test-dist --module ESNext --target ES2020 --moduleResolution Bundler --skipLibCheck --types node",
     "test": "node --test test-dist/",
-    "example": "node --loader ts-node/esm examples/quickstart.ts",
-    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('test-dist',{recursive:true,force:true})\""
+    "clean": "node -e \"['dist','test-dist','examples-dist'].forEach(d=>require('fs').rmSync(d,{recursive:true,force:true}))\""
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",

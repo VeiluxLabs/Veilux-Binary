@@ -47,48 +47,84 @@ function setStatus(online) {
 // ---------- Routing ----------
 window.addEventListener("hashchange", route);
 
+const VIEWS = ["view-home", "view-detail", "view-verify", "view-docs"];
+function showView(idToShow) {
+  for (const v of VIEWS) {
+    const e = $(v);
+    if (e) e.classList.toggle("hidden", v !== idToShow);
+  }
+  document.querySelectorAll(".nav-tabs a").forEach((a) => a.classList.remove("active"));
+}
+
 function route() {
   const hash = location.hash.slice(1) || "/";
   const [, kind, id] = hash.split("/");
   if (kind === "block") {
-    showDetail();
+    showView("view-detail");
+    $("detail").innerHTML = '<div class="empty">Loading…</div>';
     renderBlockDetail(id);
   } else if (kind === "tx") {
-    showDetail();
+    showView("view-detail");
+    $("detail").innerHTML = '<div class="empty">Loading…</div>';
     renderTxDetail(id);
+  } else if (kind === "contract" || kind === "address") {
+    showView("view-detail");
+    $("detail").innerHTML = '<div class="empty">Loading…</div>';
+    renderContractDetail(id);
+  } else if (kind === "verify") {
+    showView("view-verify");
+    setTab("verify");
+  } else if (kind === "docs") {
+    showView("view-docs");
+    setTab("docs");
+    renderDocs();
   } else {
-    showHome();
+    showView("view-home");
+    setTab("home");
   }
 }
 
-function showHome() {
-  $("view-home").classList.remove("hidden");
-  $("view-detail").classList.add("hidden");
-}
-function showDetail() {
-  $("view-home").classList.add("hidden");
-  $("view-detail").classList.remove("hidden");
-  $("detail").innerHTML = '<div class="empty">Loading…</div>';
+function setTab(name) {
+  const a = document.querySelector(`.nav-tabs a[data-tab="${name}"]`);
+  if (a) a.classList.add("active");
 }
 
 // ---------- Home: stats ----------
+let lastStatValues = {};
 async function loadStats() {
   try {
     const s = await rpc("explorer_stats");
     setStatus(true);
     const tiles = [
-      { label: "Block Height", value: `#${num(s.height)}` },
-      { label: "Total Transactions", value: num(s.total_commands) },
-      { label: "Total Events", value: num(s.total_events) },
-      { label: "State Entries", value: num(s.state_entries) },
+      { key: "height", label: "Block Height", value: s.height, fmt: (v) => `#${num(v)}` },
+      { key: "txns", label: "Total Transactions", value: s.total_commands, fmt: num },
+      { key: "events", label: "Total Events", value: s.total_events, fmt: num },
+      { key: "state", label: "State Entries", value: s.state_entries, fmt: num },
     ];
-    $("statRow").innerHTML = "";
-    for (const t of tiles) {
-      const c = el("div", "stat-card");
-      c.innerHTML = `<div class="label">${t.label}</div><div class="value">${t.value}</div>`;
-      $("statRow").appendChild(c);
+    if (!$("statRow").dataset.ready) {
+      $("statRow").innerHTML = "";
+      for (const t of tiles) {
+        const c = el("div", "stat-card");
+        c.innerHTML = `<div class="label">${t.label}</div><div class="value" id="stat-${t.key}">${t.fmt(t.value)}</div>`;
+        $("statRow").appendChild(c);
+      }
+      $("statRow").dataset.ready = "1";
+    } else {
+      for (const t of tiles) {
+        const elv = $(`stat-${t.key}`);
+        if (elv) {
+          const changed = lastStatValues[t.key] !== t.value;
+          elv.textContent = t.fmt(t.value);
+          if (changed && lastStatValues[t.key] !== undefined) {
+            elv.classList.remove("bump");
+            void elv.offsetWidth; // reflow to restart animation
+            elv.classList.add("bump");
+          }
+        }
+      }
     }
-    // Prism filter options.
+    for (const t of tiles) lastStatValues[t.key] = t.value;
+
     const sel = $("prismFilter");
     const current = sel.value;
     const prisms = Object.keys(s.events_by_prism || {});
@@ -97,19 +133,25 @@ async function loadStats() {
     if (current) sel.value = current;
   } catch (e) {
     setStatus(false);
-    $("statRow").innerHTML = `<div class="stat-card"><div class="label">Connection</div><div class="value"><small>offline — check endpoint</small></div></div>`;
+    if (!$("statRow").dataset.ready) {
+      $("statRow").innerHTML = `<div class="stat-card"><div class="label">Connection</div><div class="value"><small>offline — check endpoint</small></div></div>`;
+    }
   }
 }
 
 // ---------- Home: latest blocks ----------
+let lastTopBlock = -1;
 async function loadBlocks() {
   try {
     const blocks = await rpc("explorer_recentBlocks", { limit: 12 });
     const box = $("latestBlocks");
     if (!blocks.length) { box.innerHTML = '<div class="empty">No blocks yet</div>'; return; }
+    const newTop = blocks[0].height;
     box.innerHTML = "";
     for (const b of blocks) {
       const row = el("div", "row");
+      // Animate rows that are newer than what we last rendered.
+      if (lastTopBlock >= 0 && b.height > lastTopBlock) row.classList.add("new");
       row.innerHTML = `
         <div class="row-icon">Bk</div>
         <div class="row-main">
@@ -122,6 +164,7 @@ async function loadBlocks() {
         </div>`;
       box.appendChild(row);
     }
+    lastTopBlock = newTop;
   } catch (e) {
     $("latestBlocks").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
   }
@@ -278,14 +321,16 @@ async function doSearch(q) {
   q = q.trim();
   if (!q) return;
   if (/^\d+$/.test(q)) { location.hash = `#/block/${q}`; return; }
-  // 0x + 64 hex: could be a block hash or command id. Try command first.
+  // 0x + 64 hex: could be a block hash, command id, or contract address.
   if (/^0x[0-9a-fA-F]{64}$/.test(q)) {
     const loc = await rpc("explorer_searchCommand", { command_id: q }).catch(() => null);
     if (loc && loc.found) { location.hash = `#/tx/${q}`; return; }
+    const code = await rpc("contract_getCode", { address: q }).catch(() => null);
+    if (code && code.found) { location.hash = `#/contract/${q}`; return; }
     location.hash = `#/block/${q}`;
     return;
   }
-  alert("Enter a block height, a 0x… block hash, or a command id.");
+  alert("Enter a block height, a 0x… hash, a command id, or a contract address.");
 }
 
 // ---------- Live updates via WebSocket ----------
@@ -331,16 +376,177 @@ function init() {
   $("prismFilter").onchange = loadTxns;
   $("stateBtn").onclick = loadState;
   $("statePrefix").addEventListener("keydown", (e) => { if (e.key === "Enter") loadState(); });
+  initVerify();
 
   route();
   refreshHome();
   loadState();
   connectWs();
 
-  // Periodic refresh as a fallback to WS.
   refreshTimer = setInterval(() => {
     if (!location.hash || location.hash === "#/") refreshHome();
   }, 8000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// ---------- Detail: contract ----------
+async function renderContractDetail(address) {
+  try {
+    const code = await rpc("contract_getCode", { address });
+    if (!code.found) {
+      $("detail").innerHTML = `<div class="detail-card"><h2>Contract not found</h2><div class="empty">${esc(address)}</div></div>`;
+      return;
+    }
+    const verBadge = code.verified
+      ? `<span class="verified-tag"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19l11-11-1.5-1.5z"/></svg>Verified</span>`
+      : `<a href="#/verify" class="badge">Unverified — verify ↗</a>`;
+    const kv = [
+      ["Address", code.address],
+      ["Status", verBadge],
+      ["Deployer", esc(code.deployer || "—")],
+      ["Code Size", `${num(code.code_size)} bytes`],
+      ["Code Hash", code.code_hash],
+    ];
+    let verifiedBlock = "";
+    if (code.verified) {
+      const v = await rpc("contract_getVerification", { address }).catch(() => null);
+      if (v && v.found && v.record) {
+        const r = v.record;
+        verifiedBlock = `
+          <div class="detail-card">
+            <h2>Verified Source · ${esc(r.name)}</h2>
+            <div class="kv">
+              <div class="k">Compiler</div><div class="v">${esc(r.compiler)}</div>
+              <div class="k">Verified at</div><div class="v">block #${num(r.verified_at_height)}</div>
+            </div>
+            <pre class="json">${esc(r.source)}</pre>
+            ${r.abi ? `<pre class="json">${esc(r.abi)}</pre>` : ""}
+          </div>`;
+      }
+    }
+    $("detail").innerHTML = `
+      <div class="detail-card">
+        <h2>Contract</h2>
+        <div class="kv">${kv.map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join("")}</div>
+      </div>
+      <div class="detail-card">
+        <h2>Deployed Bytecode</h2>
+        <pre class="json">0x${esc(code.bytecode_hex)}</pre>
+      </div>
+      ${verifiedBlock}`;
+  } catch (e) {
+    $("detail").innerHTML = `<div class="detail-card"><h2>Error</h2><div class="empty">${esc(e.message)}</div></div>`;
+  }
+}
+
+// ---------- Verify page ----------
+function initVerify() {
+  $("vLoadBtn").onclick = async () => {
+    const addr = $("vAddress").value.trim();
+    if (!addr) return;
+    try {
+      const code = await rpc("contract_getCode", { address: addr });
+      if (code.found) {
+        $("vBytecode").value = code.bytecode_hex;
+        flashResult($("vResult"), true, `Loaded ${code.code_size} bytes of on-chain bytecode.`);
+      } else {
+        flashResult($("vResult"), false, "Contract not found at that address.");
+      }
+    } catch (e) {
+      flashResult($("vResult"), false, e.message);
+    }
+  };
+  $("vSubmitBtn").onclick = async () => {
+    const req = {
+      address: $("vAddress").value.trim(),
+      name: $("vName").value.trim() || "Contract",
+      source: $("vSource").value,
+      bytecode_hex: $("vBytecode").value.trim(),
+      compiler: $("vCompiler").value.trim() || "photonvm-asm",
+      abi: $("vAbi").value.trim(),
+    };
+    if (!req.address || !req.bytecode_hex) {
+      flashResult($("vResult"), false, "Address and bytecode are required.");
+      return;
+    }
+    try {
+      const res = await rpc("contract_verify", req);
+      flashResult($("vResult"), res.verified, res.message + (res.verified ? ` (hash ${short(res.code_hash, 8)})` : ""));
+      if (res.verified) {
+        setTimeout(() => { location.hash = `#/contract/${req.address}`; }, 1200);
+      }
+    } catch (e) {
+      flashResult($("vResult"), false, e.message);
+    }
+  };
+}
+
+function flashResult(box, ok, msg) {
+  box.innerHTML = `<div class="verify-result ${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"} ${esc(msg)}</div>`;
+}
+
+// ---------- Docs page ----------
+function renderDocs() {
+  const c = $("docsContent");
+  if (c.dataset.rendered) return;
+  c.dataset.rendered = "1";
+  c.innerHTML = `
+    <h1>VEILUX Explorer & RPC API</h1>
+    <p class="muted">All endpoints are JSON-RPC 2.0 over HTTP POST. The node also
+    serves a WebSocket endpoint (RPC port + 1) that streams new blocks.</p>
+
+    <h2>Core</h2>
+    <table>
+      <tr><th>Method</th><th>Params</th><th>Returns</th></tr>
+      <tr><td><code>veilux_nodeInfo</code></td><td>{}</td><td>network, height, prisms</td></tr>
+      <tr><td><code>veilux_blockNumber</code></td><td>{}</td><td>current height</td></tr>
+      <tr><td><code>veilux_getBlockByNumber</code></td><td>{ height }</td><td>block</td></tr>
+      <tr><td><code>veilux_getState</code></td><td>{ key }</td><td>{ found, value_hex }</td></tr>
+      <tr><td><code>veilux_estimate</code></td><td>{ command }</td><td>{ cost }</td></tr>
+      <tr><td><code>veilux_submit</code></td><td>{ command }</td><td>{ accepted, command_id }</td></tr>
+    </table>
+
+    <h2>Explorer</h2>
+    <table>
+      <tr><th>Method</th><th>Params</th><th>Returns</th></tr>
+      <tr><td><code>explorer_stats</code></td><td>{}</td><td>chain totals + per-prism counts</td></tr>
+      <tr><td><code>explorer_recentBlocks</code></td><td>{ limit }</td><td>newest blocks first</td></tr>
+      <tr><td><code>explorer_blockByHash</code></td><td>{ hash }</td><td>block</td></tr>
+      <tr><td><code>explorer_searchCommand</code></td><td>{ command_id }</td><td>block + events</td></tr>
+      <tr><td><code>explorer_listByPrism</code></td><td>{ prism, limit }</td><td>events</td></tr>
+      <tr><td><code>explorer_statePrefix</code></td><td>{ prefix, limit }</td><td>state entries</td></tr>
+    </table>
+
+    <h2>Contract Verification</h2>
+    <table>
+      <tr><th>Method</th><th>Params</th><th>Returns</th></tr>
+      <tr><td><code>contract_getCode</code></td><td>{ address }</td><td>bytecode + verified flag</td></tr>
+      <tr><td><code>contract_verify</code></td><td>{ address, name, source, bytecode_hex, compiler, abi }</td><td>{ verified, message }</td></tr>
+      <tr><td><code>contract_getVerification</code></td><td>{ address }</td><td>{ found, record }</td></tr>
+    </table>
+
+    <h2>Example: get chain stats</h2>
+    <pre>curl -s http://127.0.0.1:8645 \\
+  -d '{"jsonrpc":"2.0","method":"explorer_stats","params":{},"id":1}'</pre>
+
+    <h2>Example: verify a contract (JS SDK)</h2>
+    <pre>import { Client } from "@veilux/sdk";
+const client = new Client("http://127.0.0.1:8645");
+const code = await client.contractGetCode("0x…");
+const res = await client.contractVerify({
+  address: "0x…", name: "Adder", compiler: "photonvm-asm 1.0",
+  source: "; assembly…", bytecode_hex: code.bytecode_hex, abi: "",
+});
+console.log(res.verified);</pre>
+
+    <h2>WebSocket subscriptions</h2>
+    <pre>const ws = new WebSocket("ws://127.0.0.1:8646");
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === "block") console.log("new block", msg.height);
+};</pre>
+
+    <p class="muted">Full SDK docs: <a href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/docs/rpc-sdk.md" target="_blank" rel="noopener">docs/rpc-sdk.md</a></p>
+  `;
+}

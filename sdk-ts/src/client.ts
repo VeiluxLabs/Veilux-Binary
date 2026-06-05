@@ -3,6 +3,7 @@ import {
   type BlockView,
   type ChainStats,
   type CommandLocation,
+  type ContractCode,
   type EstimateResult,
   type EventView,
   type NodeInfo,
@@ -10,6 +11,8 @@ import {
   type StatePrefixResult,
   type StateResult,
   type SubmitResult,
+  type VerifyRequest,
+  type VerifyResult,
 } from "./types.js";
 
 interface RpcResponse<T> {
@@ -142,5 +145,22 @@ export class Client {
   /** List state entries under a key prefix (e.g. "token/meta/"). */
   statePrefix(prefix: string, limit = 100): Promise<StatePrefixResult> {
     return this.call(RPC_METHODS.explorerStatePrefix, { prefix, limit });
+  }
+
+  // ---- Contract verification ----
+
+  /** Fetch a contract's deployed bytecode + verification status. */
+  contractGetCode(address: string): Promise<ContractCode> {
+    return this.call(RPC_METHODS.contractGetCode, { address });
+  }
+
+  /** Verify a contract's source against its on-chain bytecode. */
+  contractVerify(request: VerifyRequest): Promise<VerifyResult> {
+    return this.call(RPC_METHODS.contractVerify, request);
+  }
+
+  /** Get a stored verification record, if any. */
+  contractGetVerification(address: string): Promise<{ found: boolean; record?: unknown }> {
+    return this.call(RPC_METHODS.contractGetVerification, { address });
   }
 }

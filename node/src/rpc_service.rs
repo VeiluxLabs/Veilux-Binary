@@ -3,8 +3,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 use veilux_rpc::types::{
-    codes, BlockNotification, BlockView, ChainStats, CommandLocation, EstimateResult, EventView,
-    NodeInfo, RpcRequest, RpcResponse, StateEntry, StatePrefixResult, StateResult, SubmitResult,
+    codes, BlockNotification, BlockView, ChainStats, CommandLocation, ContractCode, EstimateResult,
+    EventView, NodeInfo, RpcRequest, RpcResponse, StateEntry, StatePrefixResult, StateResult,
+    SubmitResult, VerificationRecord, VerifyResult,
 };
 use veilux_rpc::ws::WsHub;
 use veilux_rpc::{method, server::RpcServer};
@@ -256,6 +257,83 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
             )
         }
 
+        method::CONTRACT_GET_CODE => {
+            let addr = req.params.get("address").and_then(|v| v.as_str());
+            let Some(addr) = addr else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'address'");
+            };
+            let n = node.lock().await;
+            ok(id, read_contract_code(&n, addr))
+        }
+
+        method::CONTRACT_GET_VERIFICATION => {
+            let addr = req.params.get("address").and_then(|v| v.as_str());
+            let Some(addr) = addr else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'address'");
+            };
+            let n = node.lock().await;
+            let key = format!("contract/verified/{addr}");
+            match n.state.get_json::<VerificationRecord>(&key) {
+                Ok(Some(rec)) => ok(id, serde_json::json!({ "found": true, "record": rec })),
+                _ => ok(id, serde_json::json!({ "found": false })),
+            }
+        }
+
+        method::CONTRACT_VERIFY => {
+            let vr: Result<veilux_rpc::types::VerifyRequest, _> =
+                serde_json::from_value(req.params.clone());
+            let Ok(vr) = vr else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "invalid verify request");
+            };
+            let mut n = node.lock().await;
+            let code = read_contract_code(&n, &vr.address);
+            if !code.found {
+                return ok(
+                    id,
+                    VerifyResult {
+                        verified: false,
+                        message: "contract not found on chain".into(),
+                        code_hash: String::new(),
+                    },
+                );
+            }
+            // Compare the submitted bytecode against the deployed bytecode.
+            let submitted = vr.bytecode_hex.trim_start_matches("0x").to_lowercase();
+            let onchain = code.bytecode_hex.trim_start_matches("0x").to_lowercase();
+            if submitted != onchain {
+                return ok(
+                    id,
+                    VerifyResult {
+                        verified: false,
+                        message: "submitted bytecode does not match deployed bytecode".into(),
+                        code_hash: code.code_hash.clone(),
+                    },
+                );
+            }
+            let height = n.head().height;
+            let record = VerificationRecord {
+                address: vr.address.clone(),
+                name: vr.name,
+                source: vr.source,
+                compiler: vr.compiler,
+                abi: vr.abi,
+                code_hash: code.code_hash.clone(),
+                verified_at_height: height,
+            };
+            let key = format!("contract/verified/{}", vr.address);
+            if let Err(e) = n.state.put_json(key, &record) {
+                return RpcResponse::err(id, codes::INTERNAL_ERROR, e.to_string());
+            }
+            ok(
+                id,
+                VerifyResult {
+                    verified: true,
+                    message: "contract verified".into(),
+                    code_hash: code.code_hash,
+                },
+            )
+        }
+
         other => RpcResponse::err(
             id,
             codes::METHOD_NOT_FOUND,
@@ -358,6 +436,50 @@ fn search_command(n: &Node, command_id_hex: &str) -> CommandLocation {
 
 fn parse_submit(req: &RpcRequest) -> Option<veilux_rpc::types::SubmitParams> {
     serde_json::from_value(req.params.clone()).ok()
+}
+
+/// Read a contract's deployed bytecode + verification status from state.
+fn read_contract_code(n: &Node, address: &str) -> ContractCode {
+    let key = format!("contract/code/{address}");
+    let meta: Option<serde_json::Value> = n.state.get_json(&key).ok().flatten();
+    let verified = n.state.contains(&format!("contract/verified/{address}"));
+    match meta {
+        Some(m) => {
+            // ContractMeta.code is a JSON array of bytes.
+            let code: Vec<u8> = m
+                .get("code")
+                .and_then(|c| c.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_u64().map(|n| n as u8))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let deployer = m
+                .get("deployer")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
+            let code_hash = veilux_kernel::Hash::digest(&code).to_hex();
+            ContractCode {
+                address: address.to_string(),
+                found: true,
+                deployer,
+                bytecode_hex: hex::encode(&code),
+                code_size: code.len(),
+                code_hash,
+                verified,
+            }
+        }
+        None => ContractCode {
+            address: address.to_string(),
+            found: false,
+            deployer: None,
+            bytecode_hex: String::new(),
+            code_size: 0,
+            code_hash: String::new(),
+            verified: false,
+        },
+    }
 }
 
 fn ok<T: serde::Serialize>(id: serde_json::Value, value: T) -> RpcResponse {

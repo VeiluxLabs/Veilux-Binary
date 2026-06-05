@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Contract verification** — verify a deployed PhotonVM contract's source
+  against its on-chain bytecode. New RPC methods `contract_getCode`,
+  `contract_verify`, and `contract_getVerification`; surfaced in both SDKs and
+  in the web explorer's "Verify Contract" page. Mismatched bytecode is rejected.
+- **Explorer UI v2** — motion and graphics (animated hero, entrance animations,
+  live row inserts, count-up stats), nav tabs (Explorer / Verify Contract /
+  API Docs), a built-in API documentation page, and contract detail pages with
+  a verified badge and source view.
+
 ## [0.3.1] - 2026-06-05
 
 ### Added

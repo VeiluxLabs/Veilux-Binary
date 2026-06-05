@@ -28,8 +28,9 @@ use serde_json::json;
 
 pub use veilux_kernel::{Command, Hash, PartyId, SignedCommand, Visibility};
 pub use veilux_rpc::types::{
-    BlockView, ChainStats, CommandLocation, EstimateResult, EventView, NodeInfo, StateEntry,
-    StatePrefixResult, StateResult, SubmitParams, SubmitResult,
+    BlockView, ChainStats, CommandLocation, ContractCode, EstimateResult, EventView, NodeInfo,
+    StateEntry, StatePrefixResult, StateResult, SubmitParams, SubmitResult, VerificationRecord,
+    VerifyRequest, VerifyResult,
 };
 pub use veilux_rpc::{method, RpcRequest, RpcResponse};
 pub use veilux_veil::PartyIdentity;
@@ -166,6 +167,27 @@ impl Client {
         self.call(
             method::EXPLORER_STATE_PREFIX,
             json!({ "prefix": prefix, "limit": limit }),
+        )
+    }
+
+    /// Fetch a contract's deployed bytecode + verification status.
+    pub fn contract_get_code(&self, address: &str) -> Result<ContractCode, SdkError> {
+        self.call(method::CONTRACT_GET_CODE, json!({ "address": address }))
+    }
+
+    /// Verify a contract's source against its on-chain bytecode.
+    pub fn contract_verify(&self, request: &VerifyRequest) -> Result<VerifyResult, SdkError> {
+        self.call(
+            method::CONTRACT_VERIFY,
+            serde_json::to_value(request).unwrap_or_default(),
+        )
+    }
+
+    /// Get a stored verification record, if any.
+    pub fn contract_get_verification(&self, address: &str) -> Result<serde_json::Value, SdkError> {
+        self.call(
+            method::CONTRACT_GET_VERIFICATION,
+            json!({ "address": address }),
         )
     }
 }

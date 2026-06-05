@@ -91,6 +91,9 @@ export const RPC_METHODS = {
   explorerSearchCommand: "explorer_searchCommand",
   explorerListByPrism: "explorer_listByPrism",
   explorerStatePrefix: "explorer_statePrefix",
+  contractGetCode: "contract_getCode",
+  contractVerify: "contract_verify",
+  contractGetVerification: "contract_getVerification",
 } as const;
 
 // ---- Explorer types ----
@@ -135,4 +138,29 @@ export interface StatePrefixResult {
   prefix: string;
   total: number;
   entries: StateEntry[];
+}
+
+export interface ContractCode {
+  address: string;
+  found: boolean;
+  deployer: string | null;
+  bytecode_hex: string;
+  code_size: number;
+  code_hash: string;
+  verified: boolean;
+}
+
+export interface VerifyRequest {
+  address: string;
+  name: string;
+  source: string;
+  bytecode_hex: string;
+  compiler: string;
+  abi?: string;
+}
+
+export interface VerifyResult {
+  verified: boolean;
+  message: string;
+  code_hash: string;
 }

@@ -38,4 +38,9 @@ pub mod method {
     pub const EXPLORER_SEARCH_COMMAND: &str = "explorer_searchCommand";
     pub const EXPLORER_LIST_BY_PRISM: &str = "explorer_listByPrism";
     pub const EXPLORER_STATE_PREFIX: &str = "explorer_statePrefix";
+
+    // Contract verification (explorer "verify source" feature).
+    pub const CONTRACT_GET_CODE: &str = "contract_getCode";
+    pub const CONTRACT_VERIFY: &str = "contract_verify";
+    pub const CONTRACT_GET_VERIFICATION: &str = "contract_getVerification";
 }

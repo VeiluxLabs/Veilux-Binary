@@ -225,3 +225,54 @@ pub struct StatePrefixResult {
     pub total: usize,
     pub entries: Vec<StateEntry>,
 }
+
+// ---- Contract verification types ----
+
+/// The deployed bytecode of a contract.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContractCode {
+    pub address: String,
+    pub found: bool,
+    pub deployer: Option<String>,
+    /// Deployed bytecode, hex-encoded.
+    pub bytecode_hex: String,
+    pub code_size: usize,
+    /// BLAKE3 hash of the deployed bytecode.
+    pub code_hash: String,
+    pub verified: bool,
+}
+
+/// Request to verify a contract's source against its on-chain bytecode.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VerifyRequest {
+    pub address: String,
+    pub name: String,
+    /// Human-readable source (PhotonVM assembly or a higher-level note).
+    pub source: String,
+    /// The bytecode the source compiles to, hex-encoded — must match on-chain.
+    pub bytecode_hex: String,
+    pub compiler: String,
+    /// Optional ABI / opcode interface description (free-form JSON string).
+    #[serde(default)]
+    pub abi: String,
+}
+
+/// Stored verification record for a contract.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VerificationRecord {
+    pub address: String,
+    pub name: String,
+    pub source: String,
+    pub compiler: String,
+    pub abi: String,
+    pub code_hash: String,
+    pub verified_at_height: u64,
+}
+
+/// Result of a verification attempt.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VerifyResult {
+    pub verified: bool,
+    pub message: String,
+    pub code_hash: String,
+}
