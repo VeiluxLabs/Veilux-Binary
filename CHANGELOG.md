@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-05
+
 ### Added
 - **Contract verification** — verify a deployed PhotonVM contract's source
   against its on-chain bytecode. New RPC methods `contract_getCode`,
@@ -16,10 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live row inserts, count-up stats), nav tabs (Explorer / Verify Contract /
   API Docs), a built-in API documentation page, and contract detail pages with
   a verified badge and source view.
-
-## [0.3.1] - 2026-06-05
-
-### Added
 - **Web Explorer** (`explorer/`) — a modern, Etherscan/Blockscout-style block
   explorer UI: dashboard stats, latest blocks & transactions, universal search
   (height / hash / command id), block & transaction detail pages, prism activity
