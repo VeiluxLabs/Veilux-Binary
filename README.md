@@ -31,6 +31,86 @@ VEILUX is built around three ideas:
 | Ticker | `LUX` |
 | Subunit | `lumen` (1 LUX = 10¹⁸ lumen) |
 
+## What is VEILUX?
+
+VEILUX is an original **Layer-1 blockchain**, written entirely in **Rust** and
+compiled to a single, native, featherweight binary (`veilux`). It is not a fork
+and does not embed a third-party EVM — it is built from the ground up around
+three principles: **a tiny core, everything-as-a-module, and privacy by
+default.**
+
+### The technology
+
+- **100% Rust, native binary.** Compiles straight to machine code (no
+  interpreter, no VM runtime). Memory-safe with no garbage collector, and
+  deterministic — every node computes identical results, which is what BFT
+  consensus requires.
+- **Featherweight.** Release binaries are size-optimized (`opt-level="z"`, LTO,
+  stripped, `panic="abort"`) and typically only ~0.6–0.9 MB per platform. The
+  core kernel depends on just four small crates — no heavyweight database or
+  networking framework.
+- **Multi-platform.** One codebase ships to six targets: Linux (glibc + static
+  musl, x86_64 + ARM64), Windows x86_64, and macOS (Intel + Apple Silicon).
+- **Modular by construction.** Capabilities are *Prisms* you compile in only
+  when needed, so you never pay for what you don't run.
+
+### How it works
+
+| Layer | What it does |
+|-------|--------------|
+| **Photon** (kernel) | Data shapes, the `Prism` trait, the cascade pipeline, and a BLAKE3 content-addressed state. Deliberately minimal. |
+| **Aurora** (consensus) | Stake-weighted Byzantine fault-tolerant consensus: 2/3+ finality, deterministic proposer selection, quorum-synchronized proposer failover, equivocation detection. |
+| **Veil** (privacy) | One logically shared ledger; each event is sealed per-party with ChaCha20-Poly1305, while all nodes agree on a Merkle root of blinded commitments. Includes scoped selective disclosure for auditors/regulators. |
+| **Store** | Persistent block log + atomic state snapshots; the chain reloads on restart. |
+| **Network** | Lightweight TCP gossip for proposals, votes, blocks, and sync. |
+
+### Features
+
+**Built-in Prisms (add-ons):**
+
+| Prism | Capability |
+|-------|------------|
+| **Token** | Fungible tokens (ERC-20-style): transfer, approve, mint, burn |
+| **NFT** | Non-fungible tokens & collections (ERC-721-style) |
+| **Contract** | PhotonVM — a deterministic stack-based smart-contract VM |
+| **AI** | On-chain model registry + deterministic inference, with optional local LLM execution via Ollama |
+| **Storage** | Content-addressed blob storage with reference-counted pinning |
+| **Bridge** | Guardian-attested cross-chain transfers to Cosmos, Solana, and EVM chains |
+
+**Developer experience:**
+
+- **JSON-RPC API** (`veilux serve`) — a local dev node, like Anvil/Ganache
+- **WebSocket subscriptions** — real-time block notifications
+- **SDKs** — Rust (`veilux-sdk`) and TypeScript (`@veilux/sdk`, on npm), with
+  byte-compatible signing so clients in either language verify on-chain
+- **Full CI/CD** — multi-platform release binaries, Docker images, and automatic
+  npm publishing
+
+### What makes it different
+
+1. **AI-native.** AI is a first-class Prism with deterministic, verifiable
+   inference — not a bolt-on. It can also drive local LLMs through Ollama.
+2. **Banking-grade privacy.** The VeilLedger model keeps data confidential from
+   competitors while remaining provably transparent to authorized regulators,
+   enforced by cryptography rather than policy.
+3. **Featherweight & modular.** A tiny core plus opt-in Prisms means stronger
+   security, smaller binaries, and long-term maintainability.
+4. **Cross-chain by design.** The Bridge Prism connects VEILUX to other
+   ecosystems out of the box.
+
+### Who it's for
+
+- **Financial institutions** building confidential finance and tokenized assets
+- **Decentralized AI** applications needing verifiable on-chain inference
+- **Enterprises** coordinating multi-party workflows over private-but-verifiable data
+- **Web3 developers** shipping dApps with the Rust or TypeScript SDK
+
+### Status
+
+VEILUX is a fully functional chain: live multi-node BFT consensus, persistence,
+networking, privacy, six Prisms, and JSON-RPC + WebSocket APIs with Rust and
+TypeScript SDKs — all covered by tests and continuous integration.
+
 ## Workspace layout
 
 ```
