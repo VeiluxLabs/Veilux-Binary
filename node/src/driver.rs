@@ -164,7 +164,7 @@ impl RoundMachine {
 
         if kind == VoteKind::Prevote
             && self.phase == Phase::Prevoted
-            && aurora.has_prevote_quorum(self.height, &block_hash)
+            && aurora.has_prevote_quorum(self.height, self.round, &block_hash)
             && aurora.validators.is_validator(me)
         {
             self.phase = Phase::Precommitted;

@@ -57,7 +57,7 @@ pub struct Aurora {
     pub config: ConsensusConfig,
     pub validators: ValidatorSet,
     pub me: Option<PartyId>,
-    rounds: HashMap<u64, VoteSet>,
+    rounds: HashMap<(u64, u32), VoteSet>,
     committed: HashMap<u64, Hash>,
 }
 
@@ -125,7 +125,7 @@ impl Aurora {
         }
         let vset = &self.validators;
         let quorum = vset.quorum_threshold();
-        let entry = self.rounds.entry(vote.height).or_default();
+        let entry = self.rounds.entry((vote.height, vote.round)).or_default();
         let is_new = entry.add(vote, vset)?;
         if !is_new {
             return Ok(CommitOutcome::Pending);
@@ -154,9 +154,9 @@ impl Aurora {
         Ok(CommitOutcome::Pending)
     }
 
-    pub fn has_prevote_quorum(&self, height: u64, block: &Hash) -> bool {
+    pub fn has_prevote_quorum(&self, height: u64, round: u32, block: &Hash) -> bool {
         self.rounds
-            .get(&height)
+            .get(&(height, round))
             .map(|vs| {
                 vs.prevote_power(block, &self.validators) >= self.validators.quorum_threshold()
             })
@@ -176,7 +176,7 @@ impl Aurora {
     }
 
     pub fn prune_below(&mut self, height: u64) {
-        self.rounds.retain(|&h, _| h >= height);
+        self.rounds.retain(|&(h, _), _| h >= height);
         self.committed.retain(|&h, _| h >= height);
     }
 }
@@ -220,6 +220,17 @@ mod tests {
         }
     }
 
+    fn vote_at(voter: &str, height: u64, round: u32, block: Hash, kind: VoteKind) -> Vote {
+        Vote {
+            height,
+            round,
+            block_hash: block,
+            voter: PartyId::new(voter),
+            kind,
+            signature: vec![],
+        }
+    }
+
     #[test]
     fn commits_at_two_thirds() {
         let mut e = engine();
@@ -241,5 +252,45 @@ mod tests {
     fn proposer_rotation_is_deterministic() {
         let e = engine();
         assert_eq!(e.proposer_for(0, 0), e.proposer_for(0, 0));
+    }
+
+    #[test]
+    fn voting_across_views_is_not_equivocation() {
+        // A leader failure forces a view change: the same validators must be
+        // able to vote for a *different* block at the same height in a higher
+        // round. Votes are tallied per (height, round), so this is legal and
+        // the higher view can still reach finality. (Regression: previously
+        // votes were keyed by height only, so the second view's prevote was
+        // rejected as equivocation and the chain could never finalize after a
+        // single view change.)
+        let mut e = engine();
+        let view0 = Hash::digest(b"view-0-block");
+        let view1 = Hash::digest(b"view-1-block");
+
+        // Round 0 stalls (proposer offline): a couple of prevotes trickle in.
+        e.add_vote(&vote_at("v1", 1, 0, view0, VoteKind::Prevote))
+            .unwrap();
+        e.add_vote(&vote_at("v2", 1, 0, view0, VoteKind::Prevote))
+            .unwrap();
+
+        // Round 1 with a new proposer and a new block: same voters, no
+        // equivocation error, and the round reaches its own prevote quorum.
+        for v in ["v1", "v2", "v3"] {
+            e.add_vote(&vote_at(v, 1, 1, view1, VoteKind::Prevote))
+                .expect("higher-round prevote must be accepted");
+        }
+        assert!(e.has_prevote_quorum(1, 1, &view1));
+        assert!(!e.has_prevote_quorum(1, 0, &view1));
+
+        // Precommits in round 1 finalize the new block.
+        for v in ["v1", "v2", "v3"] {
+            let out = e
+                .add_vote(&vote_at(v, 1, 1, view1, VoteKind::Precommit))
+                .unwrap();
+            if let CommitOutcome::Committed { block_hash, .. } = out {
+                assert_eq!(block_hash, view1);
+            }
+        }
+        assert_eq!(e.is_committed(1), Some(view1));
     }
 }

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Consensus liveness: multi-view finality.** Votes are now tallied per
+  `(height, round)` instead of per height. Previously, after a single leader
+  failure and view change, a validator's prevote for the new view's block was
+  rejected by its own engine as equivocation against its earlier-view prevote,
+  so a fresh quorum could never form and the chain rotated views forever
+  without finalizing. Validators can now legitimately vote across views at the
+  same height, so the network finalizes through leader failover. Verified live
+  with 4 networked validators (byte-identical hashes across nodes) and surviving
+  the loss of one validator. Regression test added.
+
 ## [0.3.2] - 2026-06-05
 
 ### Fixed
