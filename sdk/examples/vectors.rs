@@ -1,11 +1,15 @@
 //! Prints cross-language test vectors so the TypeScript SDK can assert
 //! byte-for-byte compatibility (signing bytes, command id, signature).
 
-use veilux_sdk::{builders, Hash, PartyIdentity, Visibility};
 use veilux_kernel::Command;
+use veilux_sdk::{builders, Hash, PartyIdentity, Visibility};
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
 }
 
 fn dump(label: &str, id: &PartyIdentity, cmd: Command) {
@@ -40,7 +44,10 @@ fn main() {
     let token_id = Hash::commit("token/id", &[b"alice", b"GLD", b"Gold Coin"]);
     let transfer = builders::token_transfer(
         alice.party().clone(),
-        Visibility::Parties(vec![veilux_sdk::PartyId::new("alice"), veilux_sdk::PartyId::new("bob")]),
+        Visibility::Parties(vec![
+            veilux_sdk::PartyId::new("alice"),
+            veilux_sdk::PartyId::new("bob"),
+        ]),
         1,
         token_id,
         veilux_sdk::PartyId::new("bob"),
