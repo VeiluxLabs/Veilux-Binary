@@ -70,3 +70,7 @@ jobs:
       - name: Type-check and build
         working-directory: sdk-ts
         run: npm run build
+
+      - name: Run cross-language compatibility tests
+        working-directory: sdk-ts
+        run: npm test

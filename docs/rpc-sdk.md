@@ -141,7 +141,18 @@ Build & run the example:
 ```bash
 cd sdk-ts
 npm install && npm run build
-node examples-dist/quickstart.js   # against a running `veilux serve`
+npm test                            # cross-language compatibility tests
+node examples-dist/quickstart.js    # against a running `veilux serve`
+```
+
+Helper utilities (no manual hashing needed):
+
+```ts
+import { tokenId, collectionId, contractAddress, stateKeys } from "@veilux/sdk";
+
+const id = tokenId("alice", "GLD", "Gold");        // derive token id
+const bal = await client.tokenBalance(id, "bob");  // -> bigint
+await client.waitForHeight(10);                    // poll until height
 ```
 
 Cross-language compatibility notes:

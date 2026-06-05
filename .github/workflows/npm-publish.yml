@@ -1,0 +1,36 @@
+name: Publish TypeScript SDK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish-npm:
+    name: Publish @veilux/sdk to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        working-directory: sdk-ts
+        run: npm install
+
+      - name: Build and test
+        working-directory: sdk-ts
+        run: |
+          npm run build
+          npm test
+
+      - name: Publish (skips if version already published)
+        working-directory: sdk-ts
+        run: npm publish --access public || echo "version already published; skipping"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

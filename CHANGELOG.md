@@ -12,7 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Node.js or the browser. Ed25519 signing and BLAKE3 hashing are byte-compatible
   with the Rust node, so TS-signed commands verify on-chain. Ships typed
   client, identity, command builders, and a runnable quickstart example.
-- CI job that type-checks and builds the TypeScript SDK on every push.
+- SDK id helpers (`tokenId`, `collectionId`, `contractAddress`), state-key
+  helpers, `Client.tokenBalance()` and `Client.waitForHeight()` conveniences.
+- Cross-language compatibility test suite asserting TS signing bytes, command
+  ids, and Ed25519 signatures match the Rust node exactly.
+- CI job that type-checks, builds, and tests the TypeScript SDK on every push.
+- npm publish workflow that releases `@veilux/sdk` on version tags.
+- Contributor tooling: `CONTRIBUTING.md`, PR template, issue templates, and a
+  `develop` integration branch as the PR target.
+
+### Fixed
+- Release workflow no longer duplicates the changelog: builds upload artifacts,
+  then a single publish job creates the release using the matching `CHANGELOG.md`
+  section as the body.
 
 ## [0.2.0] - 2026-06-05
 
