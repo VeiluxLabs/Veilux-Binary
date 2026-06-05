@@ -18,6 +18,9 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "pretest": "tsc && tsc test/compat.test.ts --rootDir test --outDir test-dist --module ESNext --target ES2020 --moduleResolution Bundler --skipLibCheck --types node",
