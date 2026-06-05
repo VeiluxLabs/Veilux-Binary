@@ -1,0 +1,195 @@
+pub mod message;
+
+pub use message::NetMessage;
+
+use std::sync::Arc;
+
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{broadcast, mpsc, Mutex};
+use tracing::{debug, info, warn};
+
+#[derive(Debug, thiserror::Error)]
+pub enum NetError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("encode error: {0}")]
+    Encode(#[from] serde_json::Error),
+}
+
+#[derive(Clone, Debug)]
+pub struct NetConfig {
+    pub node_id: String,
+    pub listen_addr: String,
+    pub bootstrap: Vec<String>,
+}
+
+impl Default for NetConfig {
+    fn default() -> Self {
+        NetConfig {
+            node_id: "node".into(),
+            listen_addr: "127.0.0.1:30420".into(),
+            bootstrap: vec![],
+        }
+    }
+}
+
+pub struct Network {
+    cfg: NetConfig,
+    outbound: broadcast::Sender<String>,
+    inbound_tx: mpsc::UnboundedSender<NetMessage>,
+    peer_count: Arc<Mutex<usize>>,
+}
+
+pub struct NetHandle {
+    pub inbound: mpsc::UnboundedReceiver<NetMessage>,
+    pub net: Arc<Network>,
+}
+
+impl Network {
+    pub fn spawn(cfg: NetConfig) -> NetHandle {
+        let (outbound, _) = broadcast::channel::<String>(1024);
+        let (inbound_tx, inbound_rx) = mpsc::unbounded_channel::<NetMessage>();
+        let net = Arc::new(Network {
+            cfg: cfg.clone(),
+            outbound,
+            inbound_tx,
+            peer_count: Arc::new(Mutex::new(0)),
+        });
+
+        let listener_net = Arc::clone(&net);
+        tokio::spawn(async move {
+            if let Err(e) = listener_net.run_listener().await {
+                warn!(error = %e, "listener stopped");
+            }
+        });
+
+        for addr in cfg.bootstrap.iter().cloned() {
+            let dial_net = Arc::clone(&net);
+            tokio::spawn(async move {
+                dial_net.dial(addr).await;
+            });
+        }
+
+        NetHandle {
+            inbound: inbound_rx,
+            net,
+        }
+    }
+
+    pub fn broadcast(&self, msg: &NetMessage) -> Result<(), NetError> {
+        let line = msg.encode()?;
+        let _ = self.outbound.send(line);
+        debug!(kind = msg.kind(), "broadcast queued");
+        Ok(())
+    }
+
+    pub async fn peer_count(&self) -> usize {
+        *self.peer_count.lock().await
+    }
+
+    async fn run_listener(self: Arc<Self>) -> Result<(), NetError> {
+        let listener = TcpListener::bind(&self.cfg.listen_addr).await?;
+        info!(addr = %self.cfg.listen_addr, node = %self.cfg.node_id, "listening for peers");
+        loop {
+            let (stream, addr) = listener.accept().await?;
+            debug!(%addr, "peer connected (inbound)");
+            let me = Arc::clone(&self);
+            tokio::spawn(async move {
+                me.handle_peer(stream).await;
+            });
+        }
+    }
+
+    async fn dial(self: Arc<Self>, addr: String) {
+        loop {
+            match TcpStream::connect(&addr).await {
+                Ok(stream) => {
+                    info!(%addr, "dialed peer");
+                    Arc::clone(&self).handle_peer(stream).await;
+                }
+                Err(e) => {
+                    debug!(%addr, error = %e, "dial failed, retrying");
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    }
+
+    async fn handle_peer(self: Arc<Self>, stream: TcpStream) {
+        {
+            let mut c = self.peer_count.lock().await;
+            *c += 1;
+        }
+        let (read_half, mut write_half) = stream.into_split();
+        let mut rx = self.outbound.subscribe();
+        let inbound_tx = self.inbound_tx.clone();
+        let peer_count = Arc::clone(&self.peer_count);
+
+        let writer = tokio::spawn(async move {
+            while let Ok(line) = rx.recv().await {
+                if write_half.write_all(line.as_bytes()).await.is_err() {
+                    break;
+                }
+                if write_half.write_all(b"\n").await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        let mut lines = BufReader::new(read_half).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.trim().is_empty() {
+                continue;
+            }
+            match NetMessage::decode(&line) {
+                Ok(msg) => {
+                    let _ = inbound_tx.send(msg);
+                }
+                Err(e) => debug!(error = %e, "dropping malformed message"),
+            }
+        }
+
+        writer.abort();
+        {
+            let mut c = peer_count.lock().await;
+            *c = c.saturating_sub(1);
+        }
+        debug!("peer disconnected");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use veilux_kernel::{Block, PartyId};
+
+    #[tokio::test]
+    async fn two_nodes_gossip_a_block() {
+        let a_cfg = NetConfig {
+            node_id: "a".into(),
+            listen_addr: "127.0.0.1:39001".into(),
+            bootstrap: vec![],
+        };
+        let mut a = Network::spawn(a_cfg);
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let b_cfg = NetConfig {
+            node_id: "b".into(),
+            listen_addr: "127.0.0.1:39002".into(),
+            bootstrap: vec!["127.0.0.1:39001".into()],
+        };
+        let b = Network::spawn(b_cfg);
+
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+        let blk = Block::genesis(PartyId::new("v1"), 42);
+        b.net.broadcast(&NetMessage::Block(Box::new(blk))).unwrap();
+
+        let recv = tokio::time::timeout(std::time::Duration::from_secs(2), a.inbound.recv()).await;
+        assert!(recv.is_ok(), "node A should receive a gossiped message");
+        let msg = recv.unwrap().unwrap();
+        assert_eq!(msg.kind(), "block");
+    }
+}

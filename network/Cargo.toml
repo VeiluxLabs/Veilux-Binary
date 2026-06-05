@@ -1,0 +1,16 @@
+[package]
+name = "veilux-network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "VEILUX network — lightweight TCP gossip transport for blocks, votes and commands"
+
+[dependencies]
+veilux-kernel.workspace = true
+veilux-consensus.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

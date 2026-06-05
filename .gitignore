@@ -1,4 +1,5 @@
 /target
+/veilux-data
 **/*.rs.bk
 *.pdb
 .DS_Store

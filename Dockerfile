@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY Cargo.toml Cargo.lock ./
 COPY kernel ./kernel
 COPY veil ./veil
+COPY consensus ./consensus
+COPY store ./store
+COPY network ./network
 COPY prisms ./prisms
 COPY node ./node
 

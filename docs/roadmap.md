@@ -13,15 +13,16 @@ for compliance with licensing restrictions.
 
 ## Tier 0 — Make it a real network (foundational)
 
-These aren't "future" so much as the next required steps to graduate from a
-local engine to a live chain.
+Status legend: ✅ implemented · 🔜 next.
 
-| Prism / Module | What it adds | Why |
-|----------------|--------------|-----|
-| **Consensus engine** | BFT/PoS proposer rotation + finality | Byzantine fault tolerance; the `Block.proposer` field is already there |
-| **Network layer** | libp2p gossip + block/view sync | Multi-node operation |
-| **Persistence** | append-only block store + state snapshots | Crash recovery, fast restart |
-| **`token` Prism** | native LUX accounts, transfers, fees | Pay for compute; the economic base layer |
+| Prism / Module | Status | What it adds |
+|----------------|--------|--------------|
+| **Consensus engine (Aurora)** | ✅ | stake-weighted BFT: validator set, deterministic proposer rotation, prevote/precommit, 2/3+ quorum, equivocation detection, jailing |
+| **Persistence (store)** | ✅ | append-only block log + atomic state snapshots; chain reloads on restart |
+| **Network layer** | ✅ | lightweight TCP gossip transport for blocks, votes, and commands (no heavy libp2p) |
+| **`token` Prism** | ✅ | fungible LUX-style accounts, transfers, mint/burn |
+| Multi-validator live finality loop | 🔜 | wire votes across nodes into the Aurora engine for real multi-node finality |
+| Block/view sync on join | 🔜 | `RequestBlocks` handler to catch a new node up to head |
 
 ---
 

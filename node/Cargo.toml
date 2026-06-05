@@ -17,6 +17,9 @@ ollama = ["prism-ai/ollama"]
 [dependencies]
 veilux-kernel.workspace = true
 veilux-veil.workspace = true
+veilux-consensus.workspace = true
+veilux-store.workspace = true
+veilux-network.workspace = true
 prism-ai.workspace = true
 prism-storage.workspace = true
 prism-token.workspace = true
@@ -27,5 +30,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 hex.workspace = true
 anyhow.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

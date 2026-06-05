@@ -11,7 +11,9 @@ use prism_token::{
     balance_of, create_command as token_create, transfer_command as token_transfer, TokenEvent,
     TokenPrism,
 };
+use veilux_consensus::{Aurora, ConsensusConfig, Validator, ValidatorSet};
 use veilux_kernel::{Cascade, Hash, PartyId, Visibility, PROTOCOL_VERSION, TOKEN_TICKER};
+use veilux_store::Store;
 use veilux_veil::{
     audit_open, grant_disclosure, AuditableEntry, GrantScope, PartyIdentity, ViewKeyring,
 };
@@ -21,22 +23,22 @@ use node::Node;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> Result<()> {
-    let cmd = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "info".to_string());
+    let args: Vec<String> = std::env::args().collect();
+    let cmd = args.get(1).cloned().unwrap_or_else(|| "info".to_string());
     setup_logging();
     print_banner();
 
     match cmd.as_str() {
         "info" => cmd_info(),
         "demo" => cmd_demo(),
+        "run" => cmd_run(args.get(2).map(|s| s.as_str()).unwrap_or("./veilux-data")),
         "version" | "--version" | "-V" => {
             println!("veilux {VERSION} ({PROTOCOL_VERSION})");
             Ok(())
         }
         other => {
             eprintln!(
-                "unknown command: {other}\n\nUSAGE:\n  veilux info      show kernel + installed prisms\n  veilux demo      run the end-to-end demo\n  veilux version   print version"
+                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent node (default dir ./veilux-data)\n  veilux version       print version"
             );
             std::process::exit(1);
         }
@@ -58,6 +60,76 @@ fn build_node(proposer: &str) -> Node {
         .install(Box::new(NftPrism::new()))
         .install(Box::new(ContractPrism::new()));
     Node::new(PartyId::new(proposer), cascade)
+}
+
+fn cmd_run(datadir: &str) -> Result<()> {
+    info!(datadir, "starting persistent VEILUX node");
+
+    let mut cascade = Cascade::new();
+    cascade
+        .install(Box::new(AiPrism::new()))
+        .install(Box::new(StoragePrism::new()))
+        .install(Box::new(TokenPrism::new()))
+        .install(Box::new(NftPrism::new()))
+        .install(Box::new(ContractPrism::new()));
+
+    let store = Store::open(datadir)?;
+    let proposer = PartyId::new("validator-0");
+    let mut node = Node::with_store(proposer.clone(), cascade, store)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    let mut validators = ValidatorSet::new();
+    let id = PartyIdentity::from_seed("validator-0", &[1u8; 32]);
+    validators.add(Validator::new(
+        proposer.clone(),
+        id.public_key().to_vec(),
+        100,
+    ));
+    let aurora = Aurora::new(
+        ConsensusConfig::default(),
+        validators,
+        Some(proposer.clone()),
+    );
+
+    let head = node.head();
+    info!(
+        height = head.height,
+        hash = %head.hash(),
+        blocks_on_disk = node.blocks.len(),
+        "chain loaded from disk"
+    );
+    println!("VEILUX node running (persistent).");
+    println!("  datadir       : {datadir}");
+    println!("  chain height  : #{}", node.head().height);
+    println!("  head hash     : {}", node.head().hash());
+    println!("  state root    : {}", node.state.root());
+    println!(
+        "  proposer slot : {} (consensus: Aurora BFT)",
+        aurora
+            .proposer_for(node.head().height + 1, 0)
+            .map(|p| p.0)
+            .unwrap_or_default()
+    );
+
+    let demo_id = PartyIdentity::from_seed("validator-0", &[1u8; 32]);
+    let store_party = demo_id.party().clone();
+    let next_nonce = node.nonces.get(&store_party).map(|n| n + 1).unwrap_or(0);
+    let put = prism_storage::put_command(
+        store_party,
+        Visibility::Public,
+        next_nonce,
+        "heartbeat",
+        format!("block-{}", node.head().height + 1).into_bytes(),
+    );
+    node.submit_signed(demo_id.sign(put))
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let summary = node
+        .produce_block()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    info!(height = summary.height, hash = %summary.hash, "block produced and persisted");
+    println!("\nproduced + persisted block #{}", summary.height);
+    println!("re-run `veilux run {datadir}` to see the chain grow and reload from disk.");
+    Ok(())
 }
 
 fn cmd_info() -> Result<()> {

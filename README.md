@@ -46,13 +46,16 @@ veilux/
 │   ├── disclosure.rs  #   scoped selective disclosure (auditor/regulator)
 │   ├── projection.rs  #   split a block into per-party views
 │   └── ledger.rs      #   per-party sub-ledgers
+├── consensus/         # Aurora — stake-weighted BFT (validators, votes, quorum)
+├── store/             # append-only block log + state snapshots (persistence)
+├── network/           # lightweight TCP gossip (blocks, votes, commands)
 ├── prisms/
 │   ├── ai/            # AI Prism: model registry + inference (+ optional Ollama)
 │   ├── storage/       # Storage Prism: content-addressed blobs + pinning
 │   ├── token/         # Token Prism: fungible tokens (ERC-20-like)
 │   ├── nft/           # NFT Prism: non-fungible tokens (ERC-721-like)
 │   └── contract/      # Contract Prism: PhotonVM smart contracts
-└── node/              # assembles kernel + veil + prisms into the `veilux` binary
+└── node/              # assembles kernel + veil + consensus + store + prisms
 ```
 
 ## The cascade
@@ -118,7 +121,12 @@ cargo build --release          # featherweight, size-optimized binaries
 cargo test --workspace         # kernel/veil/prism unit tests (all green)
 cargo run --bin veilux -- info # show kernel + installed prisms
 cargo run --bin veilux -- demo # private AI + storage + audit demo
+cargo run --bin veilux -- run  # persistent node (BFT consensus + disk store)
 ```
+
+The `run` command opens a data directory (default `./veilux-data`), loads any
+existing chain from disk, produces+persists a block, and reports the Aurora BFT
+proposer slot. Re-running it shows the chain growing across restarts.
 
 See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-start.
 
@@ -129,6 +137,7 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 | `docs/INSTALL.md` | Install, build, run, troubleshoot, CI/CD, Docker |
 | `docs/architecture.md` | System design, cascade, state model |
 | `docs/add-ons.md` | Per-Prism specs (AI, Storage, Token, NFT, Contract) + how to build your own |
+| `docs/consensus-networking.md` | Aurora BFT consensus, persistence, and gossip transport |
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
 | `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
 | `docs/security.md` | Threat model + exploitation review + what runs safely |

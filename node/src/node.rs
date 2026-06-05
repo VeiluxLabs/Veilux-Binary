@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use veilux_kernel::{Block, Cascade, Command, Hash, PartyId, SignedCommand, StateTree};
+use veilux_store::Store;
 use veilux_veil::{project_block, verify_signed, SubLedger, ViewKeyring};
 
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +29,8 @@ pub enum NodeError {
     TooLarge(usize),
     #[error("mempool is full")]
     MempoolFull,
+    #[error("store error: {0}")]
+    Store(String),
 }
 
 pub struct Limits {
@@ -57,6 +60,7 @@ pub struct Node {
     pub accounts: HashMap<PartyId, Vec<u8>>,
     pub nonces: HashMap<PartyId, u64>,
     pub limits: Limits,
+    pub store: Option<Store>,
 }
 
 impl Node {
@@ -73,7 +77,34 @@ impl Node {
             accounts: HashMap::new(),
             nonces: HashMap::new(),
             limits: Limits::default(),
+            store: None,
         }
+    }
+
+    pub fn with_store(
+        proposer: PartyId,
+        cascade: Cascade,
+        store: Store,
+    ) -> Result<Self, NodeError> {
+        let mut node = Node::new(proposer, cascade);
+        let existing = store
+            .load_blocks()
+            .map_err(|e| NodeError::Store(e.to_string()))?;
+        if !existing.is_empty() {
+            node.blocks = existing;
+            if let Some(state) = store
+                .load_state()
+                .map_err(|e| NodeError::Store(e.to_string()))?
+            {
+                node.state = state;
+            }
+        } else {
+            store
+                .append_block(&node.blocks[0])
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+        node.store = Some(store);
+        Ok(node)
     }
 
     pub fn host_party(&mut self, keyring: ViewKeyring) {
@@ -184,6 +215,17 @@ impl Node {
         };
 
         self.blocks.push(block);
+
+        if let Some(store) = &self.store {
+            let last = self.blocks.last().expect("just pushed");
+            store
+                .append_block(last)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+            store
+                .save_state(&self.state)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+
         Ok(summary)
     }
 

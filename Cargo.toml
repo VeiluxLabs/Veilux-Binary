@@ -2,6 +2,9 @@
 members = [
     "kernel",
     "veil",
+    "consensus",
+    "store",
+    "network",
     "prisms/ai",
     "prisms/storage",
     "prisms/token",
@@ -29,13 +32,16 @@ chacha20poly1305 = "0.10"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 ureq = { version = "2", default-features = false, features = ["tls"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 anyhow = "1"
 
 veilux-kernel = { path = "kernel" }
 veilux-veil = { path = "veil" }
+veilux-consensus = { path = "consensus" }
+veilux-store = { path = "store" }
+veilux-network = { path = "network" }
 prism-ai = { path = "prisms/ai" }
 prism-storage = { path = "prisms/storage" }
 prism-token = { path = "prisms/token" }
