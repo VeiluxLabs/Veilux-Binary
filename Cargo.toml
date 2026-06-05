@@ -12,6 +12,7 @@ members = [
     "prisms/token",
     "prisms/nft",
     "prisms/contract",
+    "prisms/bridge",
     "node",
 ]
 resolver = "2"
@@ -51,6 +52,7 @@ prism-storage = { path = "prisms/storage" }
 prism-token = { path = "prisms/token" }
 prism-nft = { path = "prisms/nft" }
 prism-contract = { path = "prisms/contract" }
+prism-bridge = { path = "prisms/bridge" }
 
 [profile.release]
 opt-level = "z"

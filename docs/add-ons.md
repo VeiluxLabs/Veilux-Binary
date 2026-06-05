@@ -267,6 +267,62 @@ gas, explicit jump-dest validation.
 
 ---
 
+---
+
+## Prism: `bridge` — Cross-Chain Transfers
+
+**Crate:** `prisms/bridge` · **Routing name:** `bridge` · **Version:** 1.0
+
+### Purpose
+Move tokens between VEILUX and foreign chains (Cosmos, Solana, Ethereum, or a
+custom chain) using a **guardian/relayer quorum** trust model (like Wormhole). A
+registered set of guardians watches both sides and signs attestations; the
+bridge accepts an inbound transfer once a quorum of valid Ed25519 signatures is
+present.
+
+### State layout
+
+| Key | Value |
+|-----|-------|
+| `bridge/config/<chain>` | JSON `BridgeConfig` (guardians, quorum, admin) |
+| `bridge/seq/<chain>` | next expected inbound sequence (anti-replay) |
+| `bridge/outseq/<chain>` | outbound sequence counter |
+| `token/bal/<id>/<party>` | reuses Token Prism balances (bridged value is real) |
+
+### Commands (`BridgeCommand`)
+
+```jsonc
+// Register/update a foreign chain (admin-gated after creation)
+{ "op": "register_chain", "chain": "cosmos", "guardians": ["<hex pubkey>", ...], "quorum": 2 }
+
+// Outbound: lock VEILUX tokens to send abroad
+{ "op": "send", "chain": "solana", "recipient": "<foreign addr>", "token_id": [..32 bytes..], "amount": "1000" }
+
+// Inbound: redeem a guardian-attested transfer (mints wrapped tokens)
+{ "op": "redeem", "transfer": { ...InboundTransfer... }, "signatures": [{ "public_key": "...", "signature": "..." }] }
+```
+
+### Flows
+- **Outbound (`send`)**: debits the sender, emits `OutboundLocked` with a
+  sequence + digest. Off-chain relayers mint/release on the foreign chain.
+- **Inbound (`redeem`)**: verifies a guardian quorum signed the transfer digest,
+  enforces a strictly-increasing per-chain sequence (anti-replay), then credits
+  the wrapped token to the recipient.
+
+### Security model
+- Trust is in the guardian set (relayers), not pure math — documented honestly.
+- Replay protection via per-chain sequence numbers.
+- Duplicate-guardian signatures are not double-counted.
+- Deterministic signature verification, so every validator agrees.
+- Gas: register 5,000 · send 3,000 · redeem 8,000.
+
+### Supported chains
+`cosmos`, `solana`, `ethereum`, `custom`. Foreign addresses are opaque
+hex/strings interpreted by each chain's relayers, so adding a new chain needs no
+kernel change.
+
+---
+
 ## Writing your own Prism
 
 ```rust

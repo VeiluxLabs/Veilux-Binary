@@ -8,6 +8,7 @@ use anyhow::Result;
 use tracing::info;
 
 use prism_ai::{infer_command, register_command, AiEvent, AiPrism, ModelKind};
+use prism_bridge::BridgePrism;
 use prism_contract::{call_command, deploy_command, vm, ContractEvent, ContractPrism};
 use prism_nft::{create_collection_command, owner_of, NftCommand, NftEvent, NftPrism};
 use prism_storage::StoragePrism;
@@ -90,7 +91,8 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .install(Box::new(StoragePrism::new()))
         .install(Box::new(TokenPrism::new()))
         .install(Box::new(NftPrism::new()))
-        .install(Box::new(ContractPrism::new()));
+        .install(Box::new(ContractPrism::new()))
+        .install(Box::new(BridgePrism::new()));
 
     let store = Store::open(&datadir)?;
     let node = Node::with_store(PartyId::new("dev-node"), cascade, store)
@@ -194,7 +196,8 @@ fn build_node(proposer: &str) -> Node {
         .install(Box::new(StoragePrism::new()))
         .install(Box::new(TokenPrism::new()))
         .install(Box::new(NftPrism::new()))
-        .install(Box::new(ContractPrism::new()));
+        .install(Box::new(ContractPrism::new()))
+        .install(Box::new(BridgePrism::new()));
     Node::new(PartyId::new(proposer), cascade)
 }
 
@@ -207,7 +210,8 @@ fn cmd_run(datadir: &str) -> Result<()> {
         .install(Box::new(StoragePrism::new()))
         .install(Box::new(TokenPrism::new()))
         .install(Box::new(NftPrism::new()))
-        .install(Box::new(ContractPrism::new()));
+        .install(Box::new(ContractPrism::new()))
+        .install(Box::new(BridgePrism::new()));
 
     let store = Store::open(datadir)?;
     let proposer = PartyId::new("validator-0");

@@ -91,7 +91,8 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         .install(Box::new(prism_token::TokenPrism::new()))
         .install(Box::new(prism_nft::NftPrism::new()))
         .install(Box::new(prism_contract::ContractPrism::new()))
-        .install(Box::new(prism_ai::AiPrism::new()));
+        .install(Box::new(prism_ai::AiPrism::new()))
+        .install(Box::new(prism_bridge::BridgePrism::new()));
 
     let store = Store::open(&cfg.datadir)?;
     let node =

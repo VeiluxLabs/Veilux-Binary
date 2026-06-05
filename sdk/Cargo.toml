@@ -13,6 +13,7 @@ veilux-rpc.workspace = true
 prism-token.workspace = true
 prism-nft.workspace = true
 prism-contract.workspace = true
+prism-bridge.workspace = true
 prism-storage.workspace = true
 prism-ai.workspace = true
 serde.workspace = true

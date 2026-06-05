@@ -132,3 +132,41 @@ export function contractCall(
     gas_limit: gasLimit,
   });
 }
+
+// ---- Bridge Prism (cross-chain) ----
+
+export type ForeignChain = "cosmos" | "solana" | "ethereum" | "custom";
+
+export function bridgeRegisterChain(
+  submitter: PartyId,
+  visibility: Visibility,
+  nonce: number,
+  chain: ForeignChain,
+  guardians: string[],
+  quorum: number,
+): Command {
+  return cmd("bridge", submitter, visibility, nonce, {
+    op: "register_chain",
+    chain,
+    guardians,
+    quorum,
+  });
+}
+
+export function bridgeSend(
+  submitter: PartyId,
+  visibility: Visibility,
+  nonce: number,
+  chain: ForeignChain,
+  recipient: string,
+  tokenIdHex: string,
+  amount: bigint | number | string,
+): Command {
+  return cmd("bridge", submitter, visibility, nonce, {
+    op: "send",
+    chain,
+    recipient,
+    token_id: hashBytes(tokenIdHex),
+    amount: String(amount),
+  });
+}

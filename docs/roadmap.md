@@ -43,6 +43,7 @@ execution, data availability, and settlement are distinct layers
 | **ZK Coprocessor Prism** | offload heavy compute, verify a succinct proof on-chain | "Trust the math" path; complements Veil's message-based privacy |
 | **Restaking / Shared Security Prism** | let LUX stake secure external services (oracles, bridges, DA) | Programmable security as a primitive |
 | **Chain Abstraction Prism** | one UX across many chains; intents routed/settled behind the scenes | Account + chain abstraction together approach car-like ease of use ([Coinbureau](https://coinbureau.com/analysis/unifying-ethereum/)) |
+| **Bridge Prism** ✅ | guardian-attested cross-chain transfers (Cosmos, Solana, EVM, custom) | Shipped: relayer quorum, anti-replay, wrapped tokens. Next: light-client / ZK verification to reduce relayer trust |
 | **EVM/WASM Prism** | run existing smart contracts as just-another-Prism | Opt-in; the core never pays for it |
 
 ---

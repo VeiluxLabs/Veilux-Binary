@@ -13,7 +13,7 @@ VEILUX is built around three ideas:
 
 1. **A featherweight core.** The *Photon* kernel knows almost nothing. It defines the data shapes, one extension trait (`Prism`), a pipeline (`Cascade`), and a content-addressed state. That's it. Everything heavy is an add-on you compile in only if you need it. Release binaries are optimized for size (`opt-level = "z"`, LTO, stripped).
 
-2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Shipped Prisms: **AI** (+ optional Ollama), **Storage**, **Token** (ERC-20-like), **NFT** (ERC-721-like), and **Contract** (PhotonVM). They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait.
+2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Shipped Prisms: **AI** (+ optional Ollama), **Storage**, **Token** (ERC-20-like), **NFT** (ERC-721-like), **Contract** (PhotonVM), and **Bridge** (cross-chain to Cosmos/Solana/EVM). They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait.
 
 3. **Privacy by ledger (VeilLedger).** The *Veil* layer gives you one logically shared ledger where **no participant sees data they aren't a stakeholder of**. Every node agrees on the same Merkle root of *blinded commitments*, while contents are sealed per-party into encrypted **views** and stored in per-party **sub-ledgers**.
 
@@ -58,7 +58,8 @@ veilux/
 │   ├── storage/       # Storage Prism: content-addressed blobs + pinning
 │   ├── token/         # Token Prism: fungible tokens (ERC-20-like)
 │   ├── nft/           # NFT Prism: non-fungible tokens (ERC-721-like)
-│   └── contract/      # Contract Prism: PhotonVM smart contracts
+│   ├── contract/      # Contract Prism: PhotonVM smart contracts
+│   └── bridge/        # Bridge Prism: cross-chain transfers (Cosmos, Solana, EVM)
 └── node/              # assembles kernel + veil + consensus + store + prisms
 ```
 

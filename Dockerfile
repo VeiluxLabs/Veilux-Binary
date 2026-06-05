@@ -16,7 +16,6 @@ COPY rpc ./rpc
 COPY sdk ./sdk
 COPY prisms ./prisms
 COPY node ./node
-
 RUN cargo build --release --bin veilux
 
 FROM debian:bookworm-slim AS runtime

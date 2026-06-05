@@ -638,6 +638,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-bridge"
+version = "0.3.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "veilux-kernel",
+ "veilux-veil",
+]
+
+[[package]]
 name = "prism-contract"
 version = "0.3.0"
 dependencies = [
@@ -1219,6 +1232,7 @@ dependencies = [
  "anyhow",
  "hex",
  "prism-ai",
+ "prism-bridge",
  "prism-contract",
  "prism-nft",
  "prism-storage",
@@ -1257,6 +1271,7 @@ version = "0.3.0"
 dependencies = [
  "hex",
  "prism-ai",
+ "prism-bridge",
  "prism-contract",
  "prism-nft",
  "prism-storage",

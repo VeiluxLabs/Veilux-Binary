@@ -124,6 +124,9 @@ impl Client {
 /// applications need a single import.
 pub mod builders {
     pub use prism_ai::{infer_command as ai_infer, register_command as ai_register};
+    pub use prism_bridge::{
+        register_chain_command as bridge_register_chain, send_command as bridge_send,
+    };
     pub use prism_contract::{call_command as contract_call, deploy_command as contract_deploy};
     pub use prism_nft::create_collection_command as nft_create_collection;
     pub use prism_storage::put_command as storage_put;

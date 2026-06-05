@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bridge Prism** (`prisms/bridge`) — guardian-attested cross-chain transfers
+  to Cosmos, Solana, Ethereum, or a custom chain. Register a guardian set with a
+  signature quorum; lock tokens outbound (`send`) and redeem guardian-attested
+  inbound transfers (`redeem`) with anti-replay sequencing. Bridged value reuses
+  Token Prism balances, so it is real, spendable token balance. Builders added
+  to both the Rust and TypeScript SDKs.
+
 ## [0.3.0] - 2026-06-05
 
 The developer-experience release: client SDKs, real-time subscriptions, and
