@@ -91,6 +91,19 @@ where
         buf.extend_from_slice(&tmp[..n]);
     }
 
+    // Answer CORS preflight so browser-based explorers/dApps can call us.
+    let request_line = std::str::from_utf8(&buf[..body_start.min(buf.len())])
+        .unwrap_or("")
+        .lines()
+        .next()
+        .unwrap_or("");
+    if request_line.starts_with("OPTIONS") {
+        let preflight = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Max-Age: 86400\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        stream.write_all(preflight.as_bytes()).await?;
+        stream.flush().await?;
+        return Ok(());
+    }
+
     let body = &buf[body_start..(body_start + content_length).min(buf.len())];
 
     let response = match serde_json::from_slice::<RpcRequest>(body) {

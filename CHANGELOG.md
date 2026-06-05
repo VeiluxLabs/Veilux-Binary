@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-05
+
 ### Added
+- **Web Explorer** (`explorer/`) — a modern, Etherscan/Blockscout-style block
+  explorer UI: dashboard stats, latest blocks & transactions, universal search
+  (height / hash / command id), block & transaction detail pages, prism activity
+  filter, state browser, and live updates over WebSocket. Zero-build static site
+  (plain HTML/CSS/JS).
+- **CORS preflight** handling in the JSON-RPC server (`OPTIONS` → 204) so
+  browser-based explorers and dApps on other origins can call a node directly.
 - **Explorer API** — a read-heavy `explorer_*` JSON-RPC namespace for indexers,
   block explorers, and dashboards: `explorer_stats` (chain totals + per-prism
   event breakdown), `explorer_recentBlocks`, `explorer_blockByHash`,
@@ -20,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inbound transfers (`redeem`) with anti-replay sequencing. Bridged value reuses
   Token Prism balances, so it is real, spendable token balance. Builders added
   to both the Rust and TypeScript SDKs.
+  (height / hash / command id), block & transaction detail pages, prism activity
+  filter, state browser, and live updates over WebSocket. Zero-build static site
+  (plain HTML/CSS/JS).
+- **CORS preflight** handling in the JSON-RPC server (`OPTIONS` → 204) so
+  browser-based explorers and dApps on other origins can call a node directly.
 
 ## [0.3.0] - 2026-06-05
 
@@ -113,7 +127,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/VeiluxLabs/Veilux-Binary/releases/tag/v0.1.0

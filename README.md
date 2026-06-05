@@ -85,6 +85,9 @@ default.**
 - **WebSocket subscriptions** — real-time block notifications
 - **SDKs** — Rust (`veilux-sdk`) and TypeScript (`@veilux/sdk`, on npm), with
   byte-compatible signing so clients in either language verify on-chain
+- **Web Explorer** — a modern, Etherscan-style block explorer UI in [`explorer/`](explorer)
+  (static, zero-build); browse blocks, transactions, events, and state with live
+  WebSocket updates
 - **Full CI/CD** — multi-platform release binaries, Docker images, and automatic
   npm publishing
 
@@ -135,6 +138,7 @@ veilux/
 ├── rpc/               # JSON-RPC contract types + featherweight HTTP server
 ├── sdk/               # veilux-sdk: Rust client (identity + builders + RPC)
 ├── sdk-ts/            # @veilux/sdk: TypeScript/JS client for web & Node
+├── explorer/          # web block explorer (static, Etherscan-style)
 ├── prisms/
 │   ├── ai/            # AI Prism: model registry + inference (+ optional Ollama)
 │   ├── storage/       # Storage Prism: content-addressed blobs + pinning
