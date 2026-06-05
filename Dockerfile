@@ -15,6 +15,7 @@ COPY network ./network
 COPY rpc ./rpc
 COPY sdk ./sdk
 COPY prisms ./prisms
+COPY evm ./evm
 COPY node ./node
 RUN cargo build --release --bin veilux
 
