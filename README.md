@@ -51,6 +51,7 @@ veilux/
 ├── network/           # lightweight TCP gossip (blocks, votes, commands)
 ├── rpc/               # JSON-RPC contract types + featherweight HTTP server
 ├── sdk/               # veilux-sdk: Rust client (identity + builders + RPC)
+├── sdk-ts/            # @veilux/sdk: TypeScript/JS client for web & Node
 ├── prisms/
 │   ├── ai/            # AI Prism: model registry + inference (+ optional Ollama)
 │   ├── storage/       # Storage Prism: content-addressed blobs + pinning
@@ -145,11 +146,12 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 | `docs/architecture.md` | System design, cascade, state model |
 | `docs/add-ons.md` | Per-Prism specs (AI, Storage, Token, NFT, Contract) + how to build your own |
 | `docs/consensus-networking.md` | Aurora BFT consensus, persistence, and gossip transport |
-| `docs/rpc-sdk.md` | JSON-RPC API + Rust SDK for building applications |
+| `docs/rpc-sdk.md` | JSON-RPC API + Rust & TypeScript SDKs for building applications |
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
 | `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
 | `docs/security.md` | Threat model + exploitation review + what runs safely |
 | `docs/roadmap.md` | Future add-ons the chain needs next |
+| `CHANGELOG.md` | Version history (Keep a Changelog format) |
 
 ## Writing your own Prism
 

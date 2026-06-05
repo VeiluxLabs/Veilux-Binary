@@ -113,6 +113,45 @@ bob's GLD balance: "250000"
 
 ---
 
+## 3b. TypeScript SDK (`@veilux/sdk`)
+
+For web dApps and Node.js apps. Signing and hashing are byte-compatible with
+the Rust node, so TS-signed commands verify on-chain.
+
+```ts
+import { Client, PartyIdentity, builders, hashCommit, toHex } from "@veilux/sdk";
+
+const client = new Client("http://127.0.0.1:8645");
+const alice = PartyIdentity.fromSeed("alice", new Uint8Array(32).fill(1));
+
+const create = builders.tokenCreate("alice", "Public", 0, "Gold", "GLD", 18, 1_000_000n, true);
+await client.submit(alice.sign(create));
+
+const te = new TextEncoder();
+const tokenId = toHex(hashCommit("token/id",
+  [te.encode("alice"), te.encode("GLD"), te.encode("Gold")]));
+await client.submit(alice.sign(
+  builders.tokenTransfer("alice", "Public", 1, tokenId, "bob", 250_000n)));
+
+const bal = await client.getState(`token/bal/${tokenId}/bob`);
+```
+
+Build & run the example:
+
+```bash
+cd sdk-ts
+npm install && npm run build
+node examples-dist/quickstart.js   # against a running `veilux serve`
+```
+
+Cross-language compatibility notes:
+- `Hash` command fields (token id, contract address) are byte arrays on the
+  wire — the builders convert hex automatically.
+- Token amounts (`u128`) are decimal strings.
+- `Visibility` is `"Public"` or `{ Parties: [...] }`.
+
+---
+
 ## 4. Design notes
 
 - The server is a featherweight HTTP/1.1 + JSON-RPC implementation on raw
