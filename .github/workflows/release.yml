@@ -97,17 +97,53 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
+          name: dist-${{ matrix.target }}
           path: |
             ${{ env.ASSET }}
             ${{ env.SUM }}
 
-      - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+  publish:
+    name: Publish Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Extract changelog section for this tag
+        id: notes
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES_FILE="release-notes.md"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { capture=1; next }
+              capture && /^## \[/ { exit }
+              capture { print }
+            ' CHANGELOG.md > "$NOTES_FILE"
+          fi
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "Release ${GITHUB_REF_NAME}." > "$NOTES_FILE"
+          fi
+          {
+            echo ""
+            echo "---"
+            echo "Full changelog: https://github.com/VeiluxLabs/Veilux-Binary/blob/main/CHANGELOG.md"
+          } >> "$NOTES_FILE"
+          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (once)
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            ${{ env.ASSET }}
-            ${{ env.SUM }}
-          generate_release_notes: true
           name: VEILUX ${{ github.ref_name }}
+          body_path: ${{ steps.notes.outputs.file }}
+          files: artifacts/*
+          fail_on_unmatched_files: false
