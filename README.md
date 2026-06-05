@@ -122,6 +122,9 @@ default.**
    equivocating validators, and an authenticated peer transport.
 5. **Cross-chain by design.** The Bridge Prism connects VEILUX to other
    ecosystems out of the box.
+6. **EVM-reachable.** An optional `eth_*` JSON-RPC shim lets MetaMask, ethers.js,
+   and other Ethereum tooling connect to a VEILUX node and send real
+   secp256k1/EIP-155 signed value transfers (see `docs/evm-compat.md`).
 
 ### Who it's for
 
@@ -174,6 +177,7 @@ veilux/
 │   ├── staking/       # Staking & Governance Prism: stake, delegate, vote, slash
 │   ├── oracle/        # Oracle Prism: quorum-attested external data feeds
 │   └── confidential/  # Confidential Token Prism: hidden balances + disclosure
+├── evm/               # EVM compat: keccak/secp256k1 recovery, RLP, eth_* tx decode
 └── node/              # assembles kernel + veil + consensus + store + prisms
                        #   (genesis token config, fee engine, auto-slash watcher)
 ```
@@ -313,6 +317,7 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 | `docs/add-ons.md` | Per-Prism specs (all nine) + native token, fees & genesis + how to build your own |
 | `docs/consensus-networking.md` | Aurora BFT consensus, authenticated transport, persistence, and gossip |
 | `docs/rpc-sdk.md` | JSON-RPC API + Rust & TypeScript SDKs for building applications |
+| `docs/evm-compat.md` | Ethereum-compatible `eth_*` RPC — connect MetaMask & ethers.js |
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
 | `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
 | `docs/security.md` | Threat model + exploitation review + what runs safely |

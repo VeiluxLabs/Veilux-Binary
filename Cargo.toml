@@ -16,12 +16,13 @@ members = [
     "prisms/staking",
     "prisms/oracle",
     "prisms/confidential",
+    "evm",
     "node",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["nathan <nathan@winnode.xyz>"]
 license = "MIT OR Apache-2.0"
@@ -59,6 +60,7 @@ prism-bridge = { path = "prisms/bridge" }
 prism-staking = { path = "prisms/staking" }
 prism-oracle = { path = "prisms/oracle" }
 prism-confidential = { path = "prisms/confidential" }
+veilux-evm = { path = "evm" }
 
 [profile.release]
 opt-level = "z"

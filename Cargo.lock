@@ -70,6 +70,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base16ct"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -192,6 +198,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-bigint"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
+dependencies = [
+ "generic-array",
+ "rand_core",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -246,7 +264,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer",
+ "const-oid",
  "crypto-common",
+ "subtle",
 ]
 
 [[package]]
@@ -258,6 +278,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "ecdsa"
+version = "0.16.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee27f32b5c5292967d2d4a9d7f1e0b0aed2c15daded5a60300e4abb9d8020bca"
+dependencies = [
+ "der",
+ "digest",
+ "elliptic-curve",
+ "rfc6979",
+ "signature",
+ "spki",
 ]
 
 [[package]]
@@ -283,6 +317,35 @@ dependencies = [
  "sha2",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "elliptic-curve"
+version = "0.13.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
+dependencies = [
+ "base16ct",
+ "crypto-bigint",
+ "digest",
+ "ff",
+ "generic-array",
+ "group",
+ "pkcs8",
+ "rand_core",
+ "sec1",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "ff"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0b50bfb653653f9ca9095b427bed08ab8d75a137839d9ad64eb11810d5b6393"
+dependencies = [
+ "rand_core",
+ "subtle",
 ]
 
 [[package]]
@@ -314,6 +377,7 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+ "zeroize",
 ]
 
 [[package]]
@@ -334,10 +398,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
+name = "group"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
+dependencies = [
+ "ff",
+ "rand_core",
+ "subtle",
+]
+
+[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hmac"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
+dependencies = [
+ "digest",
+]
 
 [[package]]
 name = "icu_collections"
@@ -494,6 +578,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "k256"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6e3919bbaa2945715f0bb6d3934a173d1e9a59ac23767fbaaef277265a7411b"
+dependencies = [
+ "cfg-if",
+ "ecdsa",
+ "elliptic-curve",
+ "once_cell",
+ "sha2",
+]
+
+[[package]]
+name = "keccak"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
+dependencies = [
+ "cpufeatures 0.2.17",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -626,7 +732,7 @@ dependencies = [
 
 [[package]]
 name = "prism-ai"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -639,7 +745,7 @@ dependencies = [
 
 [[package]]
 name = "prism-bridge"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -652,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "prism-confidential"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -661,7 +767,7 @@ dependencies = [
 
 [[package]]
 name = "prism-contract"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -673,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "prism-nft"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -685,7 +791,7 @@ dependencies = [
 
 [[package]]
 name = "prism-oracle"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "hex",
  "serde",
@@ -696,7 +802,7 @@ dependencies = [
 
 [[package]]
 name = "prism-staking"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "hex",
  "prism-token",
@@ -708,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "prism-storage"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -720,7 +826,7 @@ dependencies = [
 
 [[package]]
 name = "prism-token"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -796,6 +902,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
+name = "rfc6979"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8dd2a808d456c4a54e300a23e9f5a67e122c3024119acbfd73e3bf664491cb2"
+dependencies = [
+ "hmac",
+ "subtle",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -857,6 +973,20 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "untrusted",
+]
+
+[[package]]
+name = "sec1"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3e97a565f76233a6003f9f5c54be1d9c5bdfa3eccfb189469f11ec4901c47dc"
+dependencies = [
+ "base16ct",
+ "der",
+ "generic-array",
+ "pkcs8",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -926,6 +1056,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.10.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77fd7028345d415a4034cf8777cd4f8ab1851274233b45f84e3d955502d93874"
+dependencies = [
+ "digest",
+ "keccak",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -955,6 +1095,7 @@ version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
+ "digest",
  "rand_core",
 ]
 
@@ -1221,7 +1362,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "veilux-consensus"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -1234,8 +1375,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "veilux-evm"
+version = "0.5.0"
+dependencies = [
+ "hex",
+ "k256",
+ "sha3",
+ "thiserror",
+]
+
+[[package]]
 name = "veilux-kernel"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "hex",
@@ -1246,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-network"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "rand",
  "serde",
@@ -1261,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-node"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "hex",
@@ -1281,6 +1432,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "veilux-consensus",
+ "veilux-evm",
  "veilux-kernel",
  "veilux-network",
  "veilux-rpc",
@@ -1290,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-rpc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "hex",
  "serde",
@@ -1304,7 +1456,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-sdk"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "hex",
  "prism-ai",
@@ -1324,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-store"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1335,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-veil"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "chacha20poly1305",

@@ -30,6 +30,7 @@ prism-bridge.workspace = true
 prism-staking.workspace = true
 prism-oracle.workspace = true
 prism-confidential.workspace = true
+veilux-evm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

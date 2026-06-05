@@ -693,4 +693,74 @@ mod tests {
         let right = alice.sign_for_chain(cmd, 42);
         assert!(n.submit_signed(right).is_ok());
     }
+
+    #[test]
+    #[ignore = "perf benchmark; run with --ignored --nocapture"]
+    fn tps_benchmark() {
+        use std::time::Instant;
+
+        let mut cascade = Cascade::new();
+        cascade.install(Box::new(prism_token::TokenPrism::new()));
+        let mut n = Node::new(PartyId::new("v0"), cascade);
+        n.limits.max_block_commands = 200_000;
+        n.limits.max_block_gas = u64::MAX;
+        n.limits.max_mempool = 500_000;
+
+        let n_tx: usize = 20_000;
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+
+        let token = prism_token::seed_native_token(
+            &mut n.state,
+            "Veilux",
+            "LUX",
+            0,
+            &PartyId::new("alice"),
+            &[(PartyId::new("alice"), (n_tx as u128) * 10)],
+        )
+        .unwrap();
+
+        let signed: Vec<_> = (0..n_tx)
+            .map(|i| {
+                let cmd = prism_token::transfer_command(
+                    PartyId::new("alice"),
+                    Visibility::Public,
+                    i as u64,
+                    token,
+                    PartyId::new("bob"),
+                    1,
+                );
+                alice.sign(cmd)
+            })
+            .collect();
+
+        let t_submit = Instant::now();
+        for s in signed {
+            n.submit_signed(s).unwrap();
+        }
+        let submit_secs = t_submit.elapsed().as_secs_f64();
+
+        let t_block = Instant::now();
+        let summary = n.produce_block().unwrap();
+        let block_secs = t_block.elapsed().as_secs_f64();
+
+        let included = summary.events;
+        let exec_tps = included as f64 / block_secs;
+        let ingest_tps = n_tx as f64 / submit_secs;
+        let e2e_tps = n_tx as f64 / (submit_secs + block_secs);
+
+        println!(
+            "\n=== VEILUX TPS (single-node, in-memory, token transfer) ===\n\
+             tx                : {n_tx}\n\
+             included in block : {included}\n\
+             ingest (verify+mempool) : {ingest_tps:.0} tx/s ({submit_secs:.3}s)\n\
+             execute+state_root      : {exec_tps:.0} tx/s ({block_secs:.3}s)\n\
+             end-to-end              : {e2e_tps:.0} tx/s\n"
+        );
+
+        assert_eq!(included, n_tx);
+        assert_eq!(
+            prism_token::balance_of(&n.state, &token, &PartyId::new("bob")),
+            n_tx as u128
+        );
+    }
 }

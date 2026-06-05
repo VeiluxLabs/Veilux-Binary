@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-05
+
+### Added
+- **EVM compatibility — connect MetaMask & Ethereum tooling.** A node can now
+  expose an Ethereum-compatible JSON-RPC endpoint with `veilux serve --eth-rpc
+  ADDR`. It speaks the `eth_*` methods wallets need (`eth_chainId`, `net_version`,
+  `eth_blockNumber`, `eth_getBalance`, `eth_getTransactionCount`, `eth_gasPrice`,
+  `eth_estimateGas`, `eth_sendRawTransaction`, `eth_getTransactionReceipt`,
+  `eth_getBlockByNumber`, `web3_clientVersion`). New `veilux-evm` crate implements
+  keccak256, EIP-55 checksum addresses, an RLP codec, and **secp256k1 sender
+  recovery** for legacy/EIP-155 raw transactions — verified against the canonical
+  EIP-155 mainnet test vector. An Ethereum address `0x…` maps to the VEILUX party
+  `eth:0x…` holding native LUX; a signed value transfer is recovered, chain-id
+  checked, applied (sender debited, recipient credited, nonce bumped), and a
+  receipt is written. Verified end-to-end: a real secp256k1-signed tx for a
+  custom chain id transfers value and is queryable exactly like on Ethereum.
+  Scope is value transfers only (no EVM bytecode execution); see
+  `docs/evm-compat.md`.
+
 ## [0.4.0] - 2026-06-05
 
 ### Added
@@ -326,7 +345,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.9...v0.4.0
 [0.3.9]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.3.7...v0.3.8

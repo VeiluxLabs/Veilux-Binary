@@ -1,4 +1,6 @@
 mod driver;
+mod eth;
+mod eth_rpc;
 mod genesis;
 mod ingress;
 mod node;
@@ -87,6 +89,11 @@ fn cmd_serve(args: &[String]) -> Result<()> {
             }
             None => "127.0.0.1:8646".to_string(),
         });
+    let eth_addr = args
+        .iter()
+        .position(|a| a == "--eth-rpc")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
 
     let mut cascade = Cascade::new();
     cascade
@@ -155,8 +162,15 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         }
     );
     println!("  height   : #{}", node.head().height);
+    if let Some(eth) = &eth_addr {
+        println!(
+            "  eth-rpc  : http://{eth}  (MetaMask: chainId {}, add as custom network)",
+            spec.chain_id
+        );
+    }
     println!("\nTry: curl -s http://{addr} -d '{{\"jsonrpc\":\"2.0\",\"method\":\"veilux_nodeInfo\",\"params\":{{}},\"id\":1}}'");
 
+    let eth_chain_id = spec.chain_id;
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -169,6 +183,17 @@ fn cmd_serve(args: &[String]) -> Result<()> {
                 tracing::warn!(error = %e, "ws server stopped");
             }
         });
+        if let Some(eth) = eth_addr {
+            let eth_state = Arc::new(eth_rpc::EthRpcState {
+                node: Arc::clone(&shared),
+                chain_id: eth_chain_id,
+            });
+            tokio::spawn(async move {
+                if let Err(e) = eth_rpc::serve_eth_rpc(eth, eth_state).await {
+                    tracing::warn!(error = %e, "eth-rpc server stopped");
+                }
+            });
+        }
         rpc_service::serve_rpc(shared, addr, hub).await
     })?;
     Ok(())
