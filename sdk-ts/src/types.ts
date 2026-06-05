@@ -67,6 +67,17 @@ export interface EstimateResult {
   cost: number;
 }
 
+/** Real-time notification pushed over WebSocket when a block is committed. */
+export interface BlockNotification {
+  type: "block";
+  height: number;
+  hash: string;
+  state_root: string;
+  command_count: number;
+  event_count: number;
+  timestamp: number;
+}
+
 export const RPC_METHODS = {
   nodeInfo: "veilux_nodeInfo",
   submit: "veilux_submit",

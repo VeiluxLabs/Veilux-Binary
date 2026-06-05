@@ -129,6 +129,40 @@ pub struct EstimateResult {
     pub cost: u64,
 }
 
+/// Real-time notification pushed over WebSocket when a block is committed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BlockNotification {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub height: u64,
+    pub hash: String,
+    pub state_root: String,
+    pub command_count: usize,
+    pub event_count: usize,
+    pub timestamp: u64,
+}
+
+impl BlockNotification {
+    pub fn new(
+        height: u64,
+        hash: String,
+        state_root: String,
+        command_count: usize,
+        event_count: usize,
+        timestamp: u64,
+    ) -> Self {
+        BlockNotification {
+            kind: "block".to_string(),
+            height,
+            hash,
+            state_root,
+            command_count,
+            event_count,
+            timestamp,
+        }
+    }
+}
+
 /// Helper to hex-encode a hash for the wire.
 pub fn hash_hex(h: &Hash) -> String {
     h.to_hex()

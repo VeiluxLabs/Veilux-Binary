@@ -626,7 +626,7 @@ dependencies = [
 
 [[package]]
 name = "prism-ai"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "prism-contract"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -651,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "prism-nft"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "prism-storage"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -675,7 +675,7 @@ dependencies = [
 
 [[package]]
 name = "prism-token"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -862,6 +862,12 @@ dependencies = [
  "serde_core",
  "zmij",
 ]
+
+[[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"
@@ -1170,7 +1176,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "veilux-consensus"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -1184,7 +1190,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-kernel"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -1195,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-network"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1208,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-node"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "hex",
@@ -1233,11 +1239,12 @@ dependencies = [
 
 [[package]]
 name = "veilux-rpc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hex",
  "serde",
  "serde_json",
+ "sha1_smol",
  "thiserror",
  "tokio",
  "tracing",
@@ -1246,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-sdk"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hex",
  "prism-ai",
@@ -1265,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-store"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1276,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "veilux-veil"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "chacha20poly1305",

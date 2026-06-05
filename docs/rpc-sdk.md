@@ -8,13 +8,14 @@ Rust SDK that wraps it with identity, command builders, and a typed client.
 ## 1. Running a dev RPC node
 
 ```bash
-veilux serve --addr 127.0.0.1:8645 --datadir ./veilux-dev-data
+veilux serve --addr 127.0.0.1:8645 --ws 127.0.0.1:8646 --datadir ./veilux-dev-data
 ```
 
-This starts a persistent single node with all Prisms installed and a JSON-RPC
-endpoint. It behaves like a local dev chain: each accepted command is applied
-and a block is produced immediately, so clients get fast, deterministic
-feedback.
+This starts a persistent single node with all Prisms installed, a JSON-RPC
+endpoint, and a WebSocket endpoint for real-time block subscriptions (the WS
+port defaults to RPC port + 1). It behaves like a local dev chain: each accepted
+command is applied and a block is produced immediately, so clients get fast,
+deterministic feedback.
 
 ---
 
@@ -163,6 +164,34 @@ Cross-language compatibility notes:
 
 ---
 
+## 3c. Real-time subscriptions (WebSocket)
+
+`veilux serve` opens a WebSocket endpoint (default RPC port + 1) that pushes a
+JSON notification for every committed block:
+
+```json
+{ "type": "block", "height": 12, "hash": "0x..", "state_root": "0x..",
+  "command_count": 1, "event_count": 1, "timestamp": 1717545600 }
+```
+
+Subscribe with the TypeScript SDK:
+
+```ts
+import { subscribeBlocks } from "@veilux/sdk";
+
+const sub = subscribeBlocks("ws://127.0.0.1:8646", {
+  onOpen: () => console.log("subscribed"),
+  onBlock: (b) => console.log("new block", b.height, b.hash),
+});
+// later: sub.close();
+```
+
+Works in browsers and Node.js (Node 20 needs `--experimental-websocket`; Node 21+
+has it by default). The server speaks RFC 6455 with a featherweight handshake +
+text framing — no external WebSocket library.
+
+---
+
 ## 4. Design notes
 
 - The server is a featherweight HTTP/1.1 + JSON-RPC implementation on raw
@@ -177,7 +206,8 @@ Cross-language compatibility notes:
 
 ## 5. Roadmap
 
-- WebSocket subscriptions (new blocks, events) for reactive apps
-- A TypeScript/JavaScript SDK for web dApps
+- WebSocket subscriptions (new blocks, events) for reactive apps ✅ (blocks)
+- A TypeScript/JavaScript SDK for web dApps ✅ (`@veilux/sdk`, published to npm)
+- Event-level (per-Prism) subscription filters
 - Auth + rate limiting for public endpoints
 - Batched requests

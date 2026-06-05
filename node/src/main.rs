@@ -68,6 +68,21 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .and_then(|i| args.get(i + 1))
         .cloned()
         .unwrap_or_else(|| "./veilux-dev-data".to_string());
+    let ws_addr = args
+        .iter()
+        .position(|a| a == "--ws")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| {
+            // Default WS port = RPC port + 1.
+            match addr.rsplit_once(':') {
+                Some((host, port)) => {
+                    let p: u16 = port.parse().unwrap_or(8645);
+                    format!("{host}:{}", p + 1)
+                }
+                None => "127.0.0.1:8646".to_string(),
+            }
+        });
 
     let mut cascade = Cascade::new();
     cascade
@@ -82,7 +97,8 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     println!("VEILUX dev RPC node");
-    println!("  endpoint : http://{addr}");
+    println!("  rpc      : http://{addr}");
+    println!("  ws       : ws://{ws_addr}  (block subscriptions)");
     println!("  datadir  : {datadir}");
     println!("  height   : #{}", node.head().height);
     println!("\nTry: curl -s http://{addr} -d '{{\"jsonrpc\":\"2.0\",\"method\":\"veilux_nodeInfo\",\"params\":{{}},\"id\":1}}'");
@@ -92,7 +108,14 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .build()?;
     rt.block_on(async move {
         let shared = Arc::new(Mutex::new(node));
-        rpc_service::serve_rpc(shared, addr).await
+        let hub = veilux_rpc::ws::WsHub::new();
+        let ws_hub = Arc::clone(&hub);
+        tokio::spawn(async move {
+            if let Err(e) = ws_hub.serve(ws_addr).await {
+                tracing::warn!(error = %e, "ws server stopped");
+            }
+        });
+        rpc_service::serve_rpc(shared, addr, hub).await
     })?;
     Ok(())
 }

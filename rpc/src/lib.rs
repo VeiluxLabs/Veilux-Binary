@@ -17,6 +17,9 @@ pub mod types;
 #[cfg(feature = "server")]
 pub mod server;
 
+#[cfg(feature = "server")]
+pub mod ws;
+
 pub use types::*;
 
 /// RPC method-name constants, shared by server and client to avoid typos.

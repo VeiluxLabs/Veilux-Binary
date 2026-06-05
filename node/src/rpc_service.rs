@@ -3,8 +3,10 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 use veilux_rpc::types::{
-    codes, BlockView, EstimateResult, NodeInfo, RpcRequest, RpcResponse, StateResult, SubmitResult,
+    codes, BlockNotification, BlockView, EstimateResult, NodeInfo, RpcRequest, RpcResponse,
+    StateResult, SubmitResult,
 };
+use veilux_rpc::ws::WsHub;
 use veilux_rpc::{method, server::RpcServer};
 
 use crate::node::Node;
@@ -12,20 +14,26 @@ use crate::node::Node;
 /// Runs the JSON-RPC server over a shared, mutable node. This is the developer
 /// entry point ("dev node"): submitted commands are applied and a block is
 /// produced immediately, so clients get fast, deterministic feedback — similar
-/// to a local Ethereum dev chain.
-pub async fn serve_rpc(node: Arc<Mutex<Node>>, listen_addr: String) -> std::io::Result<()> {
+/// to a local Ethereum dev chain. Committed blocks are pushed to the WebSocket
+/// `hub` for real-time subscribers.
+pub async fn serve_rpc(
+    node: Arc<Mutex<Node>>,
+    listen_addr: String,
+    hub: Arc<WsHub>,
+) -> std::io::Result<()> {
     let server = RpcServer::new(listen_addr.clone());
     info!(addr = %listen_addr, "starting VEILUX dev RPC node");
 
     server
         .serve(move |req| {
             let node = Arc::clone(&node);
-            async move { dispatch(node, req).await }
+            let hub = Arc::clone(&hub);
+            async move { dispatch(node, hub, req).await }
         })
         .await
 }
 
-async fn dispatch(node: Arc<Mutex<Node>>, req: RpcRequest) -> RpcResponse {
+async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> RpcResponse {
     let id = req.id.clone();
     match req.method.as_str() {
         method::NODE_INFO => {
@@ -119,6 +127,17 @@ async fn dispatch(node: Arc<Mutex<Node>>, req: RpcRequest) -> RpcResponse {
                     // Dev-node: produce a block immediately for fast feedback.
                     let _ = n.produce_block();
                     let mempool_len = n.mempool.len();
+                    let head = n.head();
+                    let notif = BlockNotification::new(
+                        head.height,
+                        head.hash().to_hex(),
+                        head.state_root.to_hex(),
+                        head.commands.len(),
+                        head.events.len(),
+                        head.timestamp,
+                    );
+                    drop(n);
+                    hub.publish(serde_json::to_string(&notif).unwrap_or_default());
                     ok(
                         id,
                         SubmitResult {

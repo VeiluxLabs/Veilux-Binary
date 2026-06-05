@@ -2,11 +2,12 @@
 
 [![CI](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/ci.yml/badge.svg)](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/ci.yml)
 [![Release](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/release.yml/badge.svg)](https://github.com/VeiluxLabs/Veilux-Binary/actions/workflows/release.yml)
+[![npm](https://img.shields.io/npm/v/@veilux/sdk?label=%40veilux%2Fsdk&color=cb3837&logo=npm)](https://www.npmjs.com/package/@veilux/sdk)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 > **Veil** (privacy by default) + **Lux** (light / illumination) — a featherweight, privacy-first, AI-native modular blockchain.
 
-Repository: **[github.com/VeiluxLabs/Veilux-Binary](https://github.com/VeiluxLabs/Veilux-Binary)**
+Repository: **[github.com/VeiluxLabs/Veilux-Binary](https://github.com/VeiluxLabs/Veilux-Binary)** &nbsp;·&nbsp; TypeScript SDK: **[npmjs.com/package/@veilux/sdk](https://www.npmjs.com/package/@veilux/sdk)** &nbsp;·&nbsp; Releases: **[binaries](https://github.com/VeiluxLabs/Veilux-Binary/releases)**
 
 VEILUX is built around three ideas:
 
@@ -125,7 +126,7 @@ cargo test --workspace         # kernel/veil/prism unit tests (all green)
 cargo run --bin veilux -- info # show kernel + installed prisms
 cargo run --bin veilux -- demo # private AI + storage + audit demo
 cargo run --bin veilux -- run  # persistent node (BFT consensus + disk store)
-cargo run --bin veilux -- serve # dev RPC node at http://127.0.0.1:8645
+cargo run --bin veilux -- serve # dev RPC + WebSocket node (http :8645, ws :8646)
 ```
 
 The `run` command opens a data directory (default `./veilux-data`), loads any
@@ -178,6 +179,36 @@ impl Prism for HelloPrism {
 
 Install it with `cascade.install(Box::new(HelloPrism))` and it's live. Full spec
 and checklist in `docs/add-ons.md`.
+
+## SDKs
+
+Build apps against VEILUX in Rust or TypeScript:
+
+- **TypeScript / JavaScript** — [`@veilux/sdk`](https://www.npmjs.com/package/@veilux/sdk)
+  [![npm version](https://img.shields.io/npm/v/@veilux/sdk?color=cb3837&logo=npm)](https://www.npmjs.com/package/@veilux/sdk)
+  [![npm downloads](https://img.shields.io/npm/dm/@veilux/sdk?color=cb3837)](https://www.npmjs.com/package/@veilux/sdk)
+
+  Source in [`sdk-ts/`](sdk-ts). Byte-compatible signing with the node, command
+  builders, typed RPC client, and WebSocket block subscriptions.
+
+  ```bash
+  npm install @veilux/sdk
+  ```
+
+  ```ts
+  import { Client, PartyIdentity, builders, subscribeBlocks } from "@veilux/sdk";
+
+  const client = new Client("http://127.0.0.1:8645");
+  const alice = PartyIdentity.fromSeed("alice", new Uint8Array(32).fill(1));
+  await client.submit(alice.sign(
+    builders.tokenCreate("alice", "Public", 0, "Gold", "GLD", 18, 1_000_000n, true)));
+
+  subscribeBlocks("ws://127.0.0.1:8646", { onBlock: (b) => console.log(b.height) });
+  ```
+
+- **Rust** — [`veilux-sdk`](sdk) crate. Same surface, native types.
+
+See [`docs/rpc-sdk.md`](docs/rpc-sdk.md) for the full API.
 
 ## Contributing
 
