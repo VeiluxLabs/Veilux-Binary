@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Authenticated P2P transport (peer confirmation + IP allowlist).** Validators
+  can now require a mutual Ed25519 signed handshake on every peer connection
+  before any consensus traffic is accepted. Each side proves it holds the secret
+  key of a registered validator by signing the other's per-connection challenge
+  (domain-separated, so observed/replayed traffic is useless); a peer whose party
+  is unknown or whose key does not match the registered one is dropped. Inbound
+  connections are additionally filtered by an optional **IP allowlist** chosen by
+  the node owner. Enabled with `veilux validator --secure [--allow-ip <IP> ...]`;
+  the transport stays open (dev mode) when `--secure` is omitted. Verified live:
+  a secure 3-validator mesh finalizes normally while an unlisted "intruder" node
+  is rejected at the handshake (`peer party … is not a known validator`) without
+  disturbing finality.
+
 ### Fixed
 - **Consensus liveness: multi-view finality.** Votes are now tallied per
   `(height, round)` instead of per height. Previously, after a single leader

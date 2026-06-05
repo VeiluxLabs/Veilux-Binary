@@ -45,7 +45,7 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!(
-                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645)\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR]\n  veilux version       print version"
+                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645)\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR] [--secure] [--allow-ip IP]\n  veilux version       print version"
             );
             std::process::exit(1);
         }
@@ -155,6 +155,15 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         })
         .collect();
 
+    let secure = args.iter().any(|a| a == "--secure");
+    let ip_allowlist: Vec<std::net::IpAddr> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--allow-ip")
+        .filter_map(|(i, _)| args.get(i + 1))
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
     let cfg = validator_loop::ValidatorConfig {
         name,
         seed: seed_from(&seed_str),
@@ -163,6 +172,8 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         bootstrap,
         peers,
         block_interval_secs: interval,
+        secure,
+        ip_allowlist,
     };
 
     let rt = tokio::runtime::Builder::new_multi_thread()

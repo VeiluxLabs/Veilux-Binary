@@ -1,7 +1,10 @@
+pub mod auth;
 pub mod message;
 
+pub use auth::{AuthConfig, AuthError, PeerInfo, PeerKey};
 pub use message::{NetMessage, ViewChange};
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -17,11 +20,26 @@ pub enum NetError {
     Encode(#[from] serde_json::Error),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct NetConfig {
     pub node_id: String,
     pub listen_addr: String,
     pub bootstrap: Vec<String>,
+    /// Optional transport authentication. When `Some`, every peer connection
+    /// must pass a mutual signed handshake (and IP allowlist, if set) before
+    /// any gossip is exchanged. When `None`, the transport is open (dev mode).
+    pub auth: Option<AuthConfig>,
+}
+
+impl std::fmt::Debug for NetConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NetConfig")
+            .field("node_id", &self.node_id)
+            .field("listen_addr", &self.listen_addr)
+            .field("bootstrap", &self.bootstrap)
+            .field("auth", &self.auth.is_some())
+            .finish()
+    }
 }
 
 impl Default for NetConfig {
@@ -30,6 +48,7 @@ impl Default for NetConfig {
             node_id: "node".into(),
             listen_addr: "127.0.0.1:30420".into(),
             bootstrap: vec![],
+            auth: None,
         }
     }
 }
@@ -90,13 +109,26 @@ impl Network {
 
     async fn run_listener(self: Arc<Self>) -> Result<(), NetError> {
         let listener = TcpListener::bind(&self.cfg.listen_addr).await?;
-        info!(addr = %self.cfg.listen_addr, node = %self.cfg.node_id, "listening for peers");
+        let auth_mode = if self.cfg.auth.is_some() {
+            "authenticated"
+        } else {
+            "open (dev)"
+        };
+        info!(addr = %self.cfg.listen_addr, node = %self.cfg.node_id, mode = auth_mode, "listening for peers");
         loop {
             let (stream, addr) = listener.accept().await?;
+            // IP allowlist is enforced on inbound connections only: the owner
+            // decides which source addresses may even attempt a handshake.
+            if let Some(auth) = &self.cfg.auth {
+                if !auth.allows_ip(&addr.ip()) {
+                    warn!(%addr, "rejected inbound peer: ip not on allowlist");
+                    continue;
+                }
+            }
             debug!(%addr, "peer connected (inbound)");
             let me = Arc::clone(&self);
             tokio::spawn(async move {
-                me.handle_peer(stream).await;
+                me.handle_peer(stream, Some(addr), true).await;
             });
         }
     }
@@ -106,7 +138,10 @@ impl Network {
             match TcpStream::connect(&addr).await {
                 Ok(stream) => {
                     info!(%addr, "dialed peer");
-                    Arc::clone(&self).handle_peer(stream).await;
+                    let peer_addr = stream.peer_addr().ok();
+                    Arc::clone(&self)
+                        .handle_peer(stream, peer_addr, false)
+                        .await;
                 }
                 Err(e) => {
                     debug!(%addr, error = %e, "dial failed, retrying");
@@ -116,12 +151,40 @@ impl Network {
         }
     }
 
-    async fn handle_peer(self: Arc<Self>, stream: TcpStream) {
+    async fn handle_peer(
+        self: Arc<Self>,
+        stream: TcpStream,
+        peer_addr: Option<SocketAddr>,
+        inbound: bool,
+    ) {
+        let (read_half, write_half) = stream.into_split();
+        let mut reader = BufReader::new(read_half);
+        let mut write_half = write_half;
+
+        // Mutual signed handshake: prove both ends hold a registered validator
+        // key before any consensus traffic is accepted. On failure the socket
+        // is dropped without ever entering the gossip loop.
+        if let Some(auth) = &self.cfg.auth {
+            match auth::perform_handshake(auth, &mut reader, &mut write_half).await {
+                Ok(peer) => {
+                    info!(
+                        party = %peer.party,
+                        addr = ?peer_addr,
+                        dir = if inbound { "inbound" } else { "outbound" },
+                        "peer authenticated"
+                    );
+                }
+                Err(e) => {
+                    warn!(addr = ?peer_addr, error = %e, "handshake failed, dropping peer");
+                    return;
+                }
+            }
+        }
+
         {
             let mut c = self.peer_count.lock().await;
             *c += 1;
         }
-        let (read_half, mut write_half) = stream.into_split();
         let mut rx = self.outbound.subscribe();
         let inbound_tx = self.inbound_tx.clone();
         let peer_count = Arc::clone(&self.peer_count);
@@ -137,7 +200,7 @@ impl Network {
             }
         });
 
-        let mut lines = BufReader::new(read_half).lines();
+        let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if line.trim().is_empty() {
                 continue;
@@ -170,6 +233,7 @@ mod tests {
             node_id: "a".into(),
             listen_addr: "127.0.0.1:39001".into(),
             bootstrap: vec![],
+            auth: None,
         };
         let mut a = Network::spawn(a_cfg);
 
@@ -179,6 +243,7 @@ mod tests {
             node_id: "b".into(),
             listen_addr: "127.0.0.1:39002".into(),
             bootstrap: vec!["127.0.0.1:39001".into()],
+            auth: None,
         };
         let b = Network::spawn(b_cfg);
 

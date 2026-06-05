@@ -4,7 +4,7 @@ use anyhow::Result;
 use tracing::{debug, info, warn};
 use veilux_consensus::{Aurora, ConsensusConfig, Validator, ValidatorSet, Vote};
 use veilux_kernel::{Cascade, PartyId, Visibility};
-use veilux_network::{NetConfig, NetHandle, NetMessage, Network, ViewChange};
+use veilux_network::{AuthConfig, NetConfig, NetHandle, NetMessage, Network, PeerKey, ViewChange};
 use veilux_store::Store;
 use veilux_veil::PartyIdentity;
 
@@ -20,6 +20,10 @@ pub struct ValidatorConfig {
     pub bootstrap: Vec<String>,
     pub peers: Vec<(String, [u8; 32])>,
     pub block_interval_secs: u64,
+    /// When true, require a mutual signed handshake on every peer connection.
+    pub secure: bool,
+    /// Source IPs allowed to dial this node (empty = any, key auth still on).
+    pub ip_allowlist: Vec<std::net::IpAddr>,
 }
 
 const VIEW_TIMEOUT_TICKS: u32 = 3;
@@ -101,10 +105,29 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
     let vset = validator_set(&(cfg.name.clone(), cfg.seed), &cfg.peers);
     let aurora = Aurora::new(ConsensusConfig::default(), vset.clone(), Some(me.clone()));
 
+    let auth = if cfg.secure {
+        let mut peers: Vec<PeerKey> = Vec::with_capacity(cfg.peers.len());
+        for (name, seed) in &cfg.peers {
+            peers.push(PeerKey {
+                party: name.clone(),
+                public_key: PartyIdentity::from_seed(name, seed).public_key().to_vec(),
+            });
+        }
+        Some(AuthConfig {
+            party: cfg.name.clone(),
+            secret_seed: cfg.seed,
+            peers,
+            ip_allowlist: cfg.ip_allowlist.clone(),
+        })
+    } else {
+        None
+    };
+
     let net = Network::spawn(NetConfig {
         node_id: cfg.name.clone(),
         listen_addr: cfg.listen_addr.clone(),
         bootstrap: cfg.bootstrap.clone(),
+        auth,
     });
     let mut net = net;
 
@@ -112,6 +135,8 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         validator = %cfg.name,
         validators = vset.active_count(),
         listen = %cfg.listen_addr,
+        secure = cfg.secure,
+        allowlisted_ips = cfg.ip_allowlist.len(),
         "validator node online"
     );
 

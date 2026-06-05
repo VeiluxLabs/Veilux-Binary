@@ -98,6 +98,7 @@ let handle = Network::spawn(NetConfig {
     node_id: "node-a".into(),
     listen_addr: "127.0.0.1:30420".into(),
     bootstrap: vec!["127.0.0.1:30421".into()],
+    auth: None, // open transport (dev). See "Authenticated transport" below.
 });
 handle.net.broadcast(&NetMessage::Block(Box::new(block)))?;
 while let Some(msg) = handle.inbound.recv().await { /* handle */ }
@@ -105,6 +106,39 @@ while let Some(msg) = handle.inbound.recv().await { /* handle */ }
 
 A unit test spins up two nodes and verifies a block gossiped from one is
 received by the other over real TCP.
+
+### Authenticated transport (peer confirmation + IP allowlist)
+
+In production a validator runs on its own server, so the transport must not
+accept gossip from strangers. Set `NetConfig.auth` to an `AuthConfig` to turn on
+a **mutual signed handshake** before any consensus traffic flows:
+
+```rust
+let auth = AuthConfig {
+    party: "v1".into(),
+    secret_seed: my_seed,                    // this node's Ed25519 seed
+    peers: vec![PeerKey { party: "v2".into(), public_key: v2_pubkey }, /* ... */],
+    ip_allowlist: vec!["203.0.113.10".parse()?], // empty = any source IP
+};
+```
+
+The handshake is symmetric. On every connection (inbound or outbound) each side:
+
+1. sends a `Hello` with its party name, Ed25519 public key, and a fresh 32-byte
+   random challenge;
+2. checks the peer's claimed key against its local allowlist — an unknown party
+   or a key that does not match the registered one is rejected immediately;
+3. signs the *other* side's challenge (domain-separated with
+   `veilux/net-handshake/v1` + the signer's party) and returns a `Proof`;
+4. verifies the peer's proof against the registered key.
+
+Only if **both** proofs verify does the socket proceed to the gossip loop;
+otherwise it is dropped. This means a peer must hold the *secret key* of a
+registered validator to join — observing or replaying traffic is not enough
+(challenges are per-connection). On inbound connections an **IP allowlist** is
+checked first, so the owner decides which source addresses may even attempt a
+handshake. The `veilux validator` command exposes this as `--secure` plus
+`--allow-ip <IP>` (repeatable).
 
 ---
 

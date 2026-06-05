@@ -1216,6 +1216,7 @@ dependencies = [
 name = "veilux-network"
 version = "0.3.2"
 dependencies = [
+ "rand",
  "serde",
  "serde_json",
  "thiserror",
@@ -1223,6 +1224,7 @@ dependencies = [
  "tracing",
  "veilux-consensus",
  "veilux-kernel",
+ "veilux-veil",
 ]
 
 [[package]]

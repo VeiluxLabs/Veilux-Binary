@@ -9,8 +9,10 @@ description = "VEILUX network — lightweight TCP gossip transport for blocks, v
 [dependencies]
 veilux-kernel.workspace = true
 veilux-consensus.workspace = true
+veilux-veil.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+rand.workspace = true

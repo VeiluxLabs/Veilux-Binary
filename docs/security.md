@@ -77,7 +77,25 @@ check.
   `commitment_is_independent_of_recipient`,
   `projection::tests::party_only_sees_own_views`.
 
-### 2.7 Consensus divergence via nondeterminism
+### 2.7 P2P transport authentication
+- **Check:** On a real network each validator runs on its own server. Can a
+  stranger who can reach a validator's port inject votes/blocks/commands or read
+  gossip?
+- **Mitigation:** Optional authenticated transport (`veilux validator --secure`).
+  Every peer connection (inbound and outbound) must pass a **mutual Ed25519
+  signed handshake** before any `NetMessage` is accepted: each side signs the
+  other's fresh per-connection challenge (domain-separated with
+  `veilux/net-handshake/v1`), and a peer whose party is unknown or whose key does
+  not match the registered validator key is dropped. Inbound connections are
+  additionally screened by an optional **IP allowlist** (`--allow-ip`). Because
+  the challenge is random per connection, observing or replaying prior traffic
+  does not let an attacker complete a handshake.
+- **Tests:** `auth::tests::mutual_handshake_succeeds_between_known_validators`,
+  `unknown_peer_is_rejected`, `forged_key_for_known_party_is_rejected`,
+  `ip_allowlist_enforced_when_set`. Verified live: a secure 3-validator mesh
+  finalizes while an unlisted intruder is rejected at the handshake.
+
+### 2.8 Consensus divergence via nondeterminism
 - **Check:** Could a Prism produce different output on different nodes (forking
   state)?
 - **Mitigation:** Prisms are required to be deterministic; the reference AI
@@ -85,7 +103,7 @@ check.
   a `BTreeMap` for deterministic ordering of the `state_root`.
 - **Tests:** `prism_ai` determinism test; `state::tests::root_is_order_independent`.
 
-### 2.8 Integer overflow
+### 2.9 Integer overflow
 - **Check:** Cost/refcount/nonce arithmetic overflow.
 - **Status:** Costs use `u64` with values far below overflow; refcounts use
   checked decrement guarded by a zero-check. Release profile uses
@@ -101,19 +119,22 @@ These are **known limitations**, documented honestly rather than hidden:
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Consensus | Single-proposer, in-memory | No BFT/PoS engine yet; `Block` carries a `proposer` field ready for one. Not Byzantine-fault-tolerant as shipped. |
-| Networking | None | No P2P layer yet; the node is a local engine. Gossip/sync is a roadmap item. |
-| Persistence | In-memory | State and blocks are not written to disk yet. |
+| Consensus | Aurora BFT (stake-weighted) | Prevote/precommit with 2/3+ finality, deterministic proposer rotation, quorum-synchronized view-change failover. Multi-view finality and live 4-node operation verified. |
+| Networking | TCP gossip + authenticated handshake | Featherweight transport for proposals/votes/blocks/commands with optional mutual signed handshake and IP allowlist (`--secure`). No transport encryption yet (payloads are signed/authenticated but sent in cleartext). |
+| Persistence | Append-only log + state snapshots | Blocks and state persist to disk and reload on restart. |
+| Transport confidentiality | None | The handshake authenticates peers but does not encrypt the channel; run validators over a private network/VPN/WireGuard or add TLS for confidentiality (roadmap). |
 | View key exchange | Passphrase-seeded | Production needs X25519-wrapped keys (see privacy-model §7). |
 | Real AI execution | Simulated (deterministic) | Real models need verifiable compute (TEE/ZK). |
 | Metadata privacy | Partial | Sizes/timing observable to non-stakeholders. |
 | Key management | Seeds in memory | No HSM/keystore integration yet. |
 
-**Bottom line:** the node and add-ons **run correctly and safely as a local,
-authenticated, privacy-preserving execution engine** (all tests green, demo
-runs end-to-end). It is **not yet a production network**: it lacks consensus,
-networking, and persistence. Treat the current build as a verified core +
-privacy layer to build a network around, not a mainnet-ready validator.
+**Bottom line:** the node runs as a **multi-node, Byzantine-fault-tolerant,
+privacy-preserving chain** — consensus, authenticated networking, and
+persistence are in place and exercised by tests and live multi-node runs. The
+main remaining hardening items are transport-level confidentiality (encryption),
+production key management (HSM/keystore), and verifiable AI execution. Treat the
+current build as a solid testnet-grade core; complete the hardening checklist
+before any value-bearing deployment.
 
 ---
 
@@ -127,6 +148,11 @@ privacy layer to build a network around, not a mainnet-ready validator.
 - [ ] Set `Limits` appropriately for your hardware before exposing any ingress.
 - [ ] When adding a network layer, terminate untrusted input at
       `submit_signed` and never bypass it.
+- [ ] Run validators with `--secure` and a curated `--peer`/`--allow-ip` set so
+      only known validator keys (from allowlisted IPs) can join the gossip mesh.
+- [ ] Until transport encryption lands, run the validator mesh over a private
+      network or VPN (e.g. WireGuard) so authenticated payloads aren't observed
+      in cleartext.
 - [ ] For banking deployments, require scoped `DisclosureGrant`s with recorded
       justifications for every audit access.
 
