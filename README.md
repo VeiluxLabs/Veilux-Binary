@@ -150,7 +150,10 @@ token economics with fees and staking, a from-scratch EVM execution layer
 Rust and TypeScript SDKs — all covered by tests and continuous integration. It has
 not yet run a public mainnet; treat it as a testnet-grade core. See
 `docs/security.md` for the honest threat model and remaining hardening items
-(ZK-blind confidential transfers, HSM key management, inter-contract EVM calls).
+(ZK-blind confidential transfers, HSM key management, inter-contract EVM calls),
+and [`docs/audit-2026-06.md`](docs/audit-2026-06.md) for the **internal security
+audit** (findings + fixes). An independent third-party audit is still required
+before any value-bearing deployment.
 
 ## Workspace layout
 
@@ -329,6 +332,7 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 | `docs/ai-ollama.md` | Running real AI models via Ollama |
 | `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
 | `docs/security.md` | Threat model + exploitation review + what runs safely |
+| [`docs/audit-2026-06.md`](docs/audit-2026-06.md) | **Internal security audit (June 2026)** — full manual review, findings & fixes |
 | `docs/roadmap.md` | Future add-ons the chain needs next |
 | `CHANGELOG.md` | Version history (Keep a Changelog format) |
 
