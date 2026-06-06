@@ -146,6 +146,27 @@ empty), and that a tampered envelope is rejected.
 > wrapped to X25519 recipient public keys (they use the per-party seed). Those
 > are the next hardening steps (§7).
 
+#### Try it live
+
+```bash
+# 1. start a stakeholder node (hosts party "alice") and an outsider node
+veilux serve --addr 127.0.0.1:8680 --host-party alice:alice-pass --datadir ./stake
+veilux serve --addr 127.0.0.1:8690 --datadir ./outsider
+
+# 2. build a confidential transaction sealed to alice + bob
+veilux seal-private --submitter alice --nonce 0 --salt round1 \
+  --party alice:alice-pass --party bob:bob-pass --token Secret:SEC:5000 > env.json
+
+# 3. submit the SAME envelope to both nodes via veilux_submitPrivate
+#    stakeholder -> {"executed":true,  "private_root":"0x…"}   (executes locally)
+#    outsider    -> {"executed":false, "private_root":"0x0…"}  (records commitment only)
+# both nodes' public state_root is unchanged; veilux_privateRoot reads the local root
+```
+
+Verified end to end: the stakeholder advances its private root while the outsider
+learns nothing but the commitment, the public root never moves, and a replayed
+envelope is rejected (`DuplicatePrivateCommitment`) even across a restart.
+
 ---
 
 ## 4. What different observers learn

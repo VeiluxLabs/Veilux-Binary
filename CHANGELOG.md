@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-06-06
+
+### Added
+- **Live private-execution tooling.** `veilux serve --host-party NAME:PASSPHRASE`
+  (repeatable) makes a dev node a confidential-transaction **stakeholder**, and a
+  new `veilux seal-private` subcommand builds a `PrivateEnvelope` JSON from the
+  CLI. This made it possible to verify the privacy model end to end over real
+  RPC: submitting the same envelope to a stakeholder node and an outsider node,
+  the stakeholder executed it (private root changed) while the outsider recorded
+  only the commitment (private root stayed zero), and the public `state_root` was
+  unchanged on both. The plaintext never appears in the serialized envelope.
+
+### Fixed
+- **Private replay protection now survives restart.** The applied
+  private-commitment set is persisted (`private_commitments.json`) and reloaded
+  on startup, so a confidential envelope that was already applied is rejected
+  with `DuplicatePrivateCommitment` even after the node restarts (previously the
+  in-memory set was lost on restart and replay only failed incidentally inside
+  the prism). Regression test `private_state_and_replay_guard_survive_restart`.
+
 ## [0.6.3] - 2026-06-06
 
 ### Added
@@ -488,7 +508,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.0...v0.6.1

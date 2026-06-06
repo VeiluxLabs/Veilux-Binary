@@ -165,6 +165,9 @@ impl Node {
         {
             node.private_state = pstate;
         }
+        node.private_commitments = store
+            .load_private_commitments()
+            .map_err(|e| NodeError::Store(e.to_string()))?;
         node.store = Some(store);
         node.restore_mempool()?;
         Ok(node)
@@ -566,6 +569,11 @@ impl Node {
         }
 
         self.private_commitments.push(envelope.commitment);
+        if let Some(store) = &self.store {
+            store
+                .save_private_commitments(&self.private_commitments)
+                .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
 
         let keyring = self
             .keyrings
@@ -1056,5 +1064,67 @@ mod tests {
             n.apply_private_envelope(&envelope),
             Err(NodeError::BadPrivateCommitment)
         ));
+    }
+
+    #[test]
+    fn private_state_and_replay_guard_survive_restart() {
+        use veilux_veil::{seal_private, ViewKeyring};
+
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("veilux-priv-restart-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let alice = ViewKeyring::from_passphrase(PartyId::new("alice"), "alice-private");
+        let inner = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Parties(vec![PartyId::new("alice")]),
+            0,
+            "Secret",
+            "SEC",
+            0,
+            1_000,
+            true,
+        );
+        let envelope = seal_private(
+            &inner,
+            &[PartyId::new("alice")],
+            &[alice.clone()],
+            Hash::digest(b"restart-round"),
+        )
+        .unwrap();
+
+        let root_after_first;
+        {
+            let mut cascade = Cascade::new();
+            cascade.install(Box::new(prism_token::TokenPrism::new()));
+            let store = Store::open(&dir).unwrap();
+            let mut n = Node::with_store(PartyId::new("v0"), cascade, store).unwrap();
+            n.host_party(alice.clone());
+            let out = n.apply_private_envelope(&envelope).unwrap();
+            assert!(out.executed);
+            root_after_first = out.private_root;
+            assert_ne!(root_after_first, Hash::ZERO);
+        }
+
+        let mut cascade = Cascade::new();
+        cascade.install(Box::new(prism_token::TokenPrism::new()));
+        let store = Store::open(&dir).unwrap();
+        let mut n = Node::with_store(PartyId::new("v0"), cascade, store).unwrap();
+        n.host_party(alice);
+
+        assert_eq!(
+            n.private_root(),
+            root_after_first,
+            "the private state root must be reloaded from disk after restart"
+        );
+        assert!(
+            matches!(
+                n.apply_private_envelope(&envelope),
+                Err(NodeError::DuplicatePrivateCommitment)
+            ),
+            "the replay guard must reject an already-applied envelope using persisted commitments"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

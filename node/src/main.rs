@@ -47,13 +47,14 @@ fn main() -> Result<()> {
         "run" => cmd_run(args.get(2).map(|s| s.as_str()).unwrap_or("./veilux-data")),
         "serve" => cmd_serve(&args),
         "validator" => cmd_validator(&args),
+        "seal-private" => cmd_seal_private(&args),
         "version" | "--version" | "-V" => {
             println!("veilux {VERSION} ({PROTOCOL_VERSION})");
             Ok(())
         }
         other => {
             eprintln!(
-                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645)\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR] [--secure] [--allow-ip IP] [--rpc ADDR]\n  veilux version       print version"
+                "unknown command: {other}\n\nUSAGE:\n  veilux info          show kernel + installed prisms\n  veilux demo          run the end-to-end demo\n  veilux run [dir]     run a persistent single node\n  veilux serve [addr] [dir]   run a dev RPC node (default 127.0.0.1:8645) [--host-party NAME:PASS] [--eth-rpc ADDR]\n  veilux seal-private --submitter S --nonce N --salt R --party NAME:PASS ... [--token NAME:SYM:AMT]   build a confidential envelope\n  veilux validator --name N --seed S --listen ADDR [--peer name:seed] [--bootstrap ADDR] [--datadir DIR] [--secure] [--allow-ip IP] [--rpc ADDR]\n  veilux version       print version"
             );
             std::process::exit(1);
         }
@@ -128,10 +129,35 @@ fn cmd_serve(args: &[String]) -> Result<()> {
     node.fee_policy = spec.fee_policy();
     node.chain_id = spec.chain_id;
 
+    let hosted_parties: Vec<String> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--host-party")
+        .filter_map(|(i, _)| args.get(i + 1).cloned())
+        .collect();
+    for spec_str in &hosted_parties {
+        let (name, pass) = spec_str.split_once(':').unwrap_or((spec_str, spec_str));
+        node.host_party(ViewKeyring::from_passphrase(PartyId::new(name), pass));
+    }
+
     println!("VEILUX dev RPC node");
     println!("  rpc      : http://{addr}");
     println!("  ws       : ws://{ws_addr}  (block subscriptions)");
     println!("  datadir  : {datadir}");
+    if !hosted_parties.is_empty() {
+        let names: Vec<String> = hosted_parties
+            .iter()
+            .map(|s| {
+                s.split_once(':')
+                    .map(|(n, _)| n.to_string())
+                    .unwrap_or(s.clone())
+            })
+            .collect();
+        println!(
+            "  hosting  : {} (private-execution stakeholder)",
+            names.join(", ")
+        );
+    }
     println!(
         "  token    : {} ({}), supply {} (genesis {})",
         spec.token_name,
@@ -274,6 +300,65 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         .enable_all()
         .build()?;
     rt.block_on(validator_loop::run_validator(cfg))
+}
+
+fn cmd_seal_private(args: &[String]) -> Result<()> {
+    let get = |flag: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == flag)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+
+    let submitter = get("--submitter").unwrap_or_else(|| "alice".to_string());
+    let nonce: u64 = get("--nonce").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let salt_str = get("--salt").unwrap_or_else(|| "round-1".to_string());
+
+    let stakeholders: Vec<(String, String)> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--party")
+        .filter_map(|(i, _)| args.get(i + 1))
+        .filter_map(|spec| {
+            spec.split_once(':')
+                .map(|(n, p)| (n.to_string(), p.to_string()))
+        })
+        .collect();
+
+    if stakeholders.is_empty() {
+        eprintln!("usage: veilux seal-private --submitter alice --nonce 0 --salt R --party alice:pass --party bob:pass [--token NAME:SYMBOL:AMOUNT]");
+        std::process::exit(1);
+    }
+
+    let token = get("--token").unwrap_or_else(|| "Secret:SEC:1000".to_string());
+    let parts: Vec<&str> = token.split(':').collect();
+    let name = parts.first().copied().unwrap_or("Secret");
+    let symbol = parts.get(1).copied().unwrap_or("SEC");
+    let amount: u128 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(1000);
+
+    let party_ids: Vec<PartyId> = stakeholders.iter().map(|(n, _)| PartyId::new(n)).collect();
+    let keyrings: Vec<ViewKeyring> = stakeholders
+        .iter()
+        .map(|(n, p)| ViewKeyring::from_passphrase(PartyId::new(n), p))
+        .collect();
+
+    let inner = prism_token::create_command(
+        PartyId::new(&submitter),
+        Visibility::Parties(party_ids.clone()),
+        nonce,
+        name,
+        symbol,
+        0,
+        amount,
+        true,
+    );
+
+    let salt = Hash::digest(salt_str.as_bytes());
+    let envelope = veilux_veil::seal_private(&inner, &party_ids, &keyrings, salt)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    println!("{}", serde_json::to_string(&envelope)?);
+    Ok(())
 }
 
 fn seed_from(s: &str) -> [u8; 32] {

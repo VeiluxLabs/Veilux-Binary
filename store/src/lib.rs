@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use tracing::{debug, info};
-use veilux_kernel::{Block, SignedCommand, StateTree};
+use veilux_kernel::{Block, Hash, SignedCommand, StateTree};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -114,6 +114,25 @@ impl Store {
         let bytes = fs::read(&path)?;
         let state: StateTree = serde_json::from_slice(&bytes)?;
         Ok(Some(state))
+    }
+
+    pub fn save_private_commitments(&self, commitments: &[Hash]) -> Result<(), StoreError> {
+        let path = self.dir.join("private_commitments.json");
+        let tmp = path.with_extension("json.tmp");
+        let bytes = serde_json::to_vec(commitments)?;
+        fs::write(&tmp, &bytes)?;
+        fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
+    pub fn load_private_commitments(&self) -> Result<Vec<Hash>, StoreError> {
+        let path = self.dir.join("private_commitments.json");
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let bytes = fs::read(&path)?;
+        let commitments: Vec<Hash> = serde_json::from_slice(&bytes)?;
+        Ok(commitments)
     }
 
     pub fn append_pending(&self, signed: &SignedCommand) -> Result<(), StoreError> {
