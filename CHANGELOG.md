@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [Unreleased]
+
+## [0.9.1] - 2026-06-07
+
+### Added
+- **Live integration tests for the new prisms** (in the node, through real block
+  production): `multisig_dispatches_inner_transfer_through_cascade` proves a
+  2-of-2 multisig only moves funds after the second confirmation and that the
+  approved inner command cascades; `dex_swap_through_block_production` runs a
+  pool create → add-liquidity → swap and checks reserves; `vesting_releases_with_chain_time`
+  funds and releases a schedule using the on-chain clock.
+
+### Notes
+- **BN254 pairing precompile (`0x08`) intentionally not shipped.** A from-scratch
+  optimal-ate pairing was implemented but **failed its own bilinearity checks**
+  (`e(P,Q)^r == 1` and `e(-P,Q)·e(P,Q) == 1`), indicating a subtle error in the
+  Frobenius / final-exponentiation step. A pairing that returns wrong answers
+  would silently validate forged zk-SNARK proofs, so the unverified code was
+  removed rather than shipped. `ecAdd` (`0x06`) and `ecMul` (`0x07`) remain and
+  pass all tests. Pairing will return once it can be validated against the
+  official EIP-197 vectors.
+
 ## [0.9.0] - 2026-06-07
 
 ### Added
@@ -714,7 +736,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.5...v0.7.6
