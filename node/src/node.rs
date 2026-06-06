@@ -43,6 +43,10 @@ pub enum NodeError {
     BlockGasExceeded { used: u64, limit: u64 },
     #[error("{0} mismatch: block does not match re-executed result")]
     RootMismatch(String),
+    #[error("private envelope commitment does not match its sealed shares")]
+    BadPrivateCommitment,
+    #[error("private envelope already applied")]
+    DuplicatePrivateCommitment,
 }
 
 pub struct Limits {
@@ -96,6 +100,8 @@ const MAX_FUTURE_DRIFT_SECS: u64 = 7_200;
 pub struct Node {
     pub cascade: Cascade,
     pub state: StateTree,
+    pub private_state: StateTree,
+    pub private_commitments: Vec<Hash>,
     pub blocks: Vec<Block>,
     pub mempool: Vec<Command>,
     pub keyrings: Vec<ViewKeyring>,
@@ -115,6 +121,8 @@ impl Node {
         Node {
             cascade,
             state: StateTree::new(),
+            private_state: StateTree::new(),
+            private_commitments: Vec::new(),
             blocks: vec![genesis],
             mempool: Vec::new(),
             keyrings: Vec::new(),
@@ -150,6 +158,12 @@ impl Node {
             store
                 .append_block(&node.blocks[0])
                 .map_err(|e| NodeError::Store(e.to_string()))?;
+        }
+        if let Some(pstate) = store
+            .load_private_state()
+            .map_err(|e| NodeError::Store(e.to_string()))?
+        {
+            node.private_state = pstate;
         }
         node.store = Some(store);
         node.restore_mempool()?;
@@ -536,6 +550,52 @@ impl Node {
         Self::base_price(&self.state, self.fee_policy)
     }
 
+    pub fn private_root(&self) -> Hash {
+        self.private_state.root()
+    }
+
+    pub fn apply_private_envelope(
+        &mut self,
+        envelope: &veilux_veil::PrivateEnvelope,
+    ) -> Result<PrivateOutcome, NodeError> {
+        if !envelope.verify_commitment() {
+            return Err(NodeError::BadPrivateCommitment);
+        }
+        if self.private_commitments.contains(&envelope.commitment) {
+            return Err(NodeError::DuplicatePrivateCommitment);
+        }
+
+        self.private_commitments.push(envelope.commitment);
+
+        let keyring = self
+            .keyrings
+            .iter()
+            .find(|k| envelope.is_stakeholder(k.party()))
+            .cloned();
+
+        let mut executed = false;
+        if let Some(kr) = keyring {
+            let inner = veilux_veil::open_private(envelope, &kr)?;
+            if !self.cascade.has(&inner.prism) {
+                return Err(NodeError::UnknownPrism(inner.prism));
+            }
+            let receipt = self.cascade.apply(inner, &mut self.private_state)?;
+            let _ = receipt;
+            executed = true;
+            if let Some(store) = &self.store {
+                store
+                    .save_private_state(&self.private_state)
+                    .map_err(|e| NodeError::Store(e.to_string()))?;
+            }
+        }
+
+        Ok(PrivateOutcome {
+            commitment: envelope.commitment,
+            executed,
+            private_root: self.private_state.root(),
+        })
+    }
+
     fn sync_persisted_mempool(&self) -> Result<(), NodeError> {
         if let Some(store) = &self.store {
             let alive: std::collections::HashSet<Hash> =
@@ -563,6 +623,13 @@ pub struct BlockSummary {
     pub state_root: Hash,
     pub total_cost: u64,
     pub views_delivered: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct PrivateOutcome {
+    pub commitment: Hash,
+    pub executed: bool,
+    pub private_root: Hash,
 }
 
 fn now() -> u64 {
@@ -885,5 +952,109 @@ mod tests {
             prism_token::balance_of(&n.state, &token, &PartyId::new("bob")),
             n_tx as u128
         );
+    }
+
+    #[test]
+    fn confidential_tx_executes_only_on_stakeholder_nodes() {
+        use veilux_veil::{seal_private, ViewKeyring};
+
+        let alice_ring = ViewKeyring::from_passphrase(PartyId::new("alice"), "alice-private");
+        let bob_ring = ViewKeyring::from_passphrase(PartyId::new("bob"), "bob-private");
+
+        let inner = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Parties(vec![PartyId::new("alice"), PartyId::new("bob")]),
+            0,
+            "Secret",
+            "SEC",
+            0,
+            1_000,
+            true,
+        );
+        let stakeholders = vec![PartyId::new("alice"), PartyId::new("bob")];
+        let envelope = seal_private(
+            &inner,
+            &stakeholders,
+            &[alice_ring.clone(), bob_ring.clone()],
+            Hash::digest(b"confidential-round-1"),
+        )
+        .unwrap();
+
+        let mut stakeholder_node = node();
+        stakeholder_node.host_party(alice_ring);
+        let global_root_before = stakeholder_node.state.root();
+        let out = stakeholder_node
+            .apply_private_envelope(&envelope)
+            .expect("stakeholder applies envelope");
+        assert!(
+            out.executed,
+            "a stakeholder node must execute the inner command"
+        );
+        assert_ne!(
+            stakeholder_node.private_root(),
+            Hash::ZERO,
+            "the stakeholder's private state must change"
+        );
+        assert_eq!(
+            stakeholder_node.state.root(),
+            global_root_before,
+            "a confidential tx must NOT touch the global public state root"
+        );
+
+        let mut outsider_node = node();
+        let outsider_out = outsider_node
+            .apply_private_envelope(&envelope)
+            .expect("outsider records commitment");
+        assert!(
+            !outsider_out.executed,
+            "a non-stakeholder node must NOT execute the inner command"
+        );
+        assert_eq!(
+            outsider_node.private_root(),
+            Hash::ZERO,
+            "a non-stakeholder must learn nothing: its private state stays empty"
+        );
+        assert!(
+            outsider_node
+                .private_commitments
+                .contains(&envelope.commitment),
+            "the outsider still witnesses that the confidential tx happened (commitment ordered)"
+        );
+
+        assert_eq!(
+            out.commitment, outsider_out.commitment,
+            "both nodes agree on the public commitment"
+        );
+    }
+
+    #[test]
+    fn confidential_tx_rejects_tampered_commitment() {
+        let alice_ring =
+            veilux_veil::ViewKeyring::from_passphrase(PartyId::new("alice"), "alice-private");
+        let inner = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Parties(vec![PartyId::new("alice")]),
+            0,
+            "Secret",
+            "SEC",
+            0,
+            1_000,
+            true,
+        );
+        let mut envelope = veilux_veil::seal_private(
+            &inner,
+            &[PartyId::new("alice")],
+            &[alice_ring.clone()],
+            Hash::digest(b"r"),
+        )
+        .unwrap();
+        envelope.shares[0].ciphertext.push(0x00);
+
+        let mut n = node();
+        n.host_party(alice_ring);
+        assert!(matches!(
+            n.apply_private_envelope(&envelope),
+            Err(NodeError::BadPrivateCommitment)
+        ));
     }
 }

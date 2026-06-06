@@ -104,6 +104,10 @@ impl ViewKeyring {
         &self.party
     }
 
+    pub fn private_seed(&self) -> &[u8] {
+        &self.seed
+    }
+
     pub fn key_for(&self, view_id: &Hash) -> [u8; 32] {
         crate::derive_view_key(&self.seed, view_id)
     }

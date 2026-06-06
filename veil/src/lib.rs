@@ -1,6 +1,7 @@
 pub mod disclosure;
 pub mod identity;
 pub mod ledger;
+pub mod private;
 pub mod projection;
 pub mod view;
 
@@ -9,6 +10,7 @@ pub use identity::{
     verify_bytes, verify_signed, verify_signed_batch, IdentityError, PartyIdentity,
 };
 pub use ledger::{SubLedger, SubLedgerEntry};
+pub use private::{open_private, seal_private, PrivateEnvelope, SealedShare};
 pub use projection::{project_block, Projection};
 pub use view::{EncryptedView, ViewError, ViewKeyring};
 

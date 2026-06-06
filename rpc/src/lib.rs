@@ -16,6 +16,8 @@ pub mod method {
     pub const GET_STATE: &str = "veilux_getState";
     pub const ESTIMATE: &str = "veilux_estimate";
     pub const GET_ACCOUNT: &str = "veilux_getAccount";
+    pub const SUBMIT_PRIVATE: &str = "veilux_submitPrivate";
+    pub const PRIVATE_ROOT: &str = "veilux_privateRoot";
 
     pub const EXPLORER_STATS: &str = "explorer_stats";
     pub const EXPLORER_RECENT_BLOCKS: &str = "explorer_recentBlocks";

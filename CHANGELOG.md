@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-06-06
+
+### Added
+- **Private execution — confidential transactions whose data stays on
+  stakeholder nodes (Canton-style ordering/validation separation).** New
+  `veil/src/private.rs` introduces the `PrivateEnvelope`: a public `commitment`
+  plus one ChaCha20-Poly1305 sealed share of the inner `Command` per stakeholder.
+  Only the commitment and opaque sealed shares are ordered on the global chain —
+  a non-stakeholder (including non-party validators) can prove a confidential
+  transaction happened but cannot decrypt it or learn its effects. A node hosting
+  a stakeholder keyring decrypts its share, executes the inner command against a
+  separate **private state tree**, and advances a **private state root** the
+  global public `state_root` never reflects. Exposed via the `veilux_submitPrivate`
+  and `veilux_privateRoot` RPC methods and persisted separately
+  (`private_state.json`). Tests prove a stakeholder executes (private root
+  changes, public root unchanged) while an outsider records only the commitment
+  (private root stays empty), the plaintext never appears in the serialized
+  envelope, and tampering is rejected by the commitment check.
+- **EVM precompiles** at addresses `0x01`/`0x02`/`0x04`/`0x05`: `ecrecover`
+  (secp256k1), `sha256`, `identity`, and `modexp` (U256-range), wired into the
+  `CALL`/`STATICCALL` path so standard contracts (e.g. OpenZeppelin ECDSA
+  recovery) work. `ripemd160` and the BN/BLS pairing precompiles are not yet
+  implemented (documented in `docs/evm-compat.md`).
+
 ## [0.6.2] - 2026-06-06
 
 ### Added
@@ -464,7 +488,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.1...v0.6.0

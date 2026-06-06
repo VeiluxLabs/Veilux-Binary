@@ -109,6 +109,43 @@ Each party's node keeps a `SubLedger`: the ordered list of events it could
 decrypt, plus the `validated_root` it checked against the global chain. This is
 the party's private, faithful projection of the one shared ledger.
 
+### 3.4 Private execution (data stays on stakeholder nodes)
+
+The projection model above still re-executes every command on every node to
+converge the global `state_root`. For workloads where even the *inputs* must
+never leave the stakeholders' servers, VeilLedger adds a **private execution**
+path (`veil/src/private.rs`), modeled on the Canton-style separation of ordering
+from validation:
+
+- A confidential transaction is wrapped in a **`PrivateEnvelope`**: a public
+  `commitment` plus one ChaCha20-Poly1305 **sealed share** per stakeholder
+  (each share encrypts the *same* inner `Command` under a key derived from that
+  stakeholder's secret seed and a per-tx salt). The commitment binds the salt,
+  the stakeholder set, and every share, so it is tamper-evident.
+- Only the **commitment and the opaque sealed shares** are ordered on the global
+  chain. Non-stakeholders — including every validator that is not a party —
+  witness *that* a confidential transaction occurred (and can prove it via the
+  commitment) but can neither decrypt the inner command nor learn its effects.
+- A node that **hosts a stakeholder keyring** decrypts its share, executes the
+  inner command against a separate **private state tree**, and advances a
+  **private state root** that only stakeholders can compute. The global public
+  `state_root` is never touched by a confidential transaction.
+
+This is exactly the institutional requirement: the ordering layer sees blinded
+commitments, while validation/execution happens locally at the participants who
+actually hold the data. The node exposes it via `veilux_submitPrivate` (apply an
+envelope) and `veilux_privateRoot` (read the local private root + count). Tests
+prove a stakeholder node executes (private root changes, public root unchanged)
+while a non-stakeholder node records only the commitment (private root stays
+empty), and that a tampered envelope is rejected.
+
+> **Honest scope.** Today stakeholders converge their private state by each
+> executing the same decrypted command (deterministic Prisms guarantee identical
+> results). There is not yet a cross-stakeholder agreement *proof* on the private
+> root (a stakeholder could in principle diverge locally), nor are sealed shares
+> wrapped to X25519 recipient public keys (they use the per-party seed). Those
+> are the next hardening steps (§7).
+
 ---
 
 ## 4. What different observers learn

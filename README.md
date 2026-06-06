@@ -114,7 +114,10 @@ default.**
 2. **Banking-grade privacy.** The VeilLedger model keeps data confidential from
    competitors while remaining provably transparent to authorized regulators,
    enforced by cryptography rather than policy. The Confidential Token Prism even
-   hides balances and amounts from public observers.
+   hides balances and amounts from public observers, and **private execution**
+   (`veilux_submitPrivate`) keeps a confidential transaction's inputs and effects
+   on stakeholder nodes only — the global chain orders just a tamper-evident
+   commitment, Canton-style.
 3. **Featherweight & modular.** A tiny core plus opt-in Prisms means stronger
    security, smaller binaries, and long-term maintainability.
 4. **Real economics & security.** Stake-weighted BFT with delegation,

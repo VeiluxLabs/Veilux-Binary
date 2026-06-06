@@ -168,6 +168,41 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
             }
         }
 
+        method::SUBMIT_PRIVATE => {
+            let env: Result<veilux_veil::PrivateEnvelope, _> = serde_json::from_value(
+                req.params
+                    .get("envelope")
+                    .cloned()
+                    .unwrap_or(req.params.clone()),
+            );
+            let Ok(envelope) = env else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing/invalid 'envelope'");
+            };
+            let mut n = node.lock().await;
+            match n.apply_private_envelope(&envelope) {
+                Ok(out) => ok(
+                    id,
+                    serde_json::json!({
+                        "commitment": out.commitment.to_hex(),
+                        "executed": out.executed,
+                        "private_root": out.private_root.to_hex(),
+                    }),
+                ),
+                Err(e) => RpcResponse::err(id, codes::COMMAND_REJECTED, e.to_string()),
+            }
+        }
+
+        method::PRIVATE_ROOT => {
+            let n = node.lock().await;
+            ok(
+                id,
+                serde_json::json!({
+                    "private_root": n.private_root().to_hex(),
+                    "private_tx_count": n.private_commitments.len(),
+                }),
+            )
+        }
+
         method::EXPLORER_STATS => {
             let n = node.lock().await;
             ok(id, build_stats(&n))

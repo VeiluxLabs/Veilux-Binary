@@ -97,6 +97,25 @@ impl Store {
         Ok(Some(state))
     }
 
+    pub fn save_private_state(&self, state: &StateTree) -> Result<(), StoreError> {
+        let path = self.dir.join("private_state.json");
+        let tmp = path.with_extension("json.tmp");
+        let bytes = serde_json::to_vec(state)?;
+        fs::write(&tmp, &bytes)?;
+        fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
+    pub fn load_private_state(&self) -> Result<Option<StateTree>, StoreError> {
+        let path = self.dir.join("private_state.json");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path)?;
+        let state: StateTree = serde_json::from_slice(&bytes)?;
+        Ok(Some(state))
+    }
+
     pub fn append_pending(&self, signed: &SignedCommand) -> Result<(), StoreError> {
         let mut f = OpenOptions::new()
             .create(true)
