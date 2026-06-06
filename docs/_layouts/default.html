@@ -111,6 +111,7 @@
   .backtop{display:inline-flex; align-items:center; gap:7px; margin-top:40px; padding:10px 18px;
       border:1px solid var(--panel-brd); border-radius:10px; background:var(--panel); color:var(--muted); font-size:14px; font-weight:500}
   .backtop:hover{border-color:rgba(86,240,208,.5); color:var(--txt); text-decoration:none}
+  .backtop svg{width:16px; height:16px}
 </style>
 </head>
 <body>
@@ -134,7 +135,7 @@
   <article class="md">
     {{ content }}
   </article>
-  <a class="backtop" href="{{ '/' | relative_url }}">← Back to home</a>
+  <a class="backtop" href="{{ '/' | relative_url }}"><i data-lucide="arrow-left"></i> Back to home</a>
 </main>
 
 <footer><div class="fwrap">
@@ -146,5 +147,7 @@
   <a href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/LICENSE-APACHE">Apache-2.0</a></div>
 </div></footer>
 
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>if (window.lucide) { lucide.createIcons(); }</script>
 </body>
 </html>

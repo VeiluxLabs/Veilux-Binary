@@ -75,6 +75,7 @@
   .btn{display:inline-flex; align-items:center; gap:9px; padding:14px 26px; border-radius:13px;
        font-weight:700; font-size:15px; transition:transform .14s ease, box-shadow .14s ease, opacity .14s}
   .btn:hover{transform:translateY(-2px)}
+  .btn svg{width:18px; height:18px}
   .btn-primary{background:linear-gradient(110deg,var(--teal),var(--green)); color:#04130e;
                box-shadow:0 10px 34px rgba(86,240,208,.34)}
   .btn-primary:hover{box-shadow:0 14px 42px rgba(86,240,208,.46)}
@@ -102,9 +103,10 @@
                background:linear-gradient(180deg,#0d121c,#0a0e16)}
   .card:hover .inner{background:linear-gradient(180deg,#0f1623,#0b1018)}
   .card .ico{width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center;
-             font-size:22px; margin-bottom:16px;
+             margin-bottom:16px;
              background:linear-gradient(135deg,rgba(86,240,208,.18),rgba(124,108,255,.18));
              border:1px solid rgba(255,255,255,.08)}
+  .card .ico svg{width:23px; height:23px; color:var(--teal)}
   .card h3{font-size:17.5px; font-weight:700; margin-bottom:7px; letter-spacing:-.3px}
   .card p{color:var(--muted); font-size:14.5px}
   code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace; font-size:.9em;
@@ -143,7 +145,10 @@
   .doc{display:flex; gap:14px; padding:18px; border:1px solid var(--panel-brd); border-radius:14px;
        background:var(--panel); align-items:center; transition:all .15s}
   .doc:hover{border-color:rgba(86,240,208,.5); background:rgba(86,240,208,.05); transform:translateY(-2px)}
-  .doc .e{font-size:22px} .doc b{color:var(--txt); display:block; font-size:14.5px; font-weight:600}
+  .doc .e{flex-shrink:0; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+          background:rgba(255,255,255,.04); border:1px solid var(--panel-brd)}
+  .doc .e svg{width:19px; height:19px; color:var(--teal)}
+  .doc b{color:var(--txt); display:block; font-size:14.5px; font-weight:600}
   .doc small{color:var(--dim); font-size:12.5px}
 
   .note{max-width:880px; margin:46px auto 0; background:rgba(255,193,94,.07);
@@ -183,8 +188,8 @@
   <p class="lead">Launch a network, deploy Solidity, move private value between named parties,
   and run verifiable on-chain AI — all from a single self-contained binary.</p>
   <div class="cta">
-    <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary">★ Star on GitHub</a>
-    <a class="btn btn-ghost" href="https://github.com/VeiluxLabs/Veilux-Binary/releases">⤓ Download binary</a>
+    <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary"><i data-lucide="star"></i> Star on GitHub</a>
+    <a class="btn btn-ghost" href="https://github.com/VeiluxLabs/Veilux-Binary/releases"><i data-lucide="download"></i> Download binary</a>
   </div>
   <div class="heronums">
     <div><div class="n gradtext">9</div><div class="l">Prisms</div></div>
@@ -201,17 +206,17 @@
     <p class="sub">No JVM, no sprawling toolchain — a self-contained Rust workspace with a pluggable “Prism” model for every capability.</p>
   </div>
   <div class="grid">
-    <div class="card"><div class="inner"><div class="ico">🔐</div><h3>Banking-grade privacy</h3>
+    <div class="card"><div class="inner"><div class="ico"><i data-lucide="shield-check"></i></div><h3>Banking-grade privacy</h3>
       <p>Each event is sealed per-party with ChaCha20-Poly1305. All nodes agree on a Merkle root of blinded data — only stakeholders can decrypt their own events.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico">⟠</div><h3>Real EVM</h3>
+    <div class="card"><div class="inner"><div class="ico"><i data-lucide="file-code-2"></i></div><h3>Real EVM</h3>
       <p>A from-scratch EVM: deploy &amp; call Solidity over <code>eth_*</code>, inter-contract calls, CREATE/CREATE2 and precompiles. MetaMask &amp; ethers.js just work.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico">🧠</div><h3>On-chain AI</h3>
+    <div class="card"><div class="inner"><div class="ico"><i data-lucide="brain-circuit"></i></div><h3>On-chain AI</h3>
       <p>Register models and run deterministic inference, or a local LLM via Ollama. Results are committed and auditable, with large outputs offloaded to storage.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico">⚖️</div><h3>BFT + slashing</h3>
+    <div class="card"><div class="inner"><div class="ico"><i data-lucide="scale"></i></div><h3>BFT + slashing</h3>
       <p>Aurora BFT finality with proposer failover. Equivocation and private-root divergence are caught cryptographically and slashed on-chain.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico">🧩</div><h3>Nine Prisms</h3>
+    <div class="card"><div class="inner"><div class="ico"><i data-lucide="blocks"></i></div><h3>Nine Prisms</h3>
       <p>Token, NFT, Contract (PhotonVM), AI, Bridge, Staking, Oracle, Storage, Confidential — install what you need, or build your own.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico">🛠️</div><h3>Rust &amp; TS SDKs</h3>
+    <div class="card"><div class="inner"><div class="ico"><i data-lucide="terminal"></i></div><h3>Rust &amp; TS SDKs</h3>
       <p>JSON-RPC, WebSocket subscriptions, a web explorer, and first-class Rust + TypeScript SDKs for building real applications.</p></div></div>
   </div>
 </div></section>
@@ -265,18 +270,18 @@
     <p class="sub">Everything is documented — from a 5-minute install to the deep privacy model.</p>
   </div>
   <div class="docs">
-    <a class="doc" href="INSTALL.html"><span class="e">🚀</span><span><b>Install, build &amp; run</b><small>Get a node up in minutes</small></span></a>
-    <a class="doc" href="architecture.html"><span class="e">🏛️</span><span><b>Architecture</b><small>Cascade, state model, design</small></span></a>
-    <a class="doc" href="evm-compat.html"><span class="e">⟠</span><span><b>EVM compatibility</b><small>MetaMask &amp; ethers.js</small></span></a>
-    <a class="doc" href="rpc-sdk.html"><span class="e">🔌</span><span><b>RPC &amp; SDKs</b><small>JSON-RPC + Rust/TS</small></span></a>
-    <a class="doc" href="privacy-model.html"><span class="e">🔐</span><span><b>Privacy model</b><small>VeilLedger, banking-grade</small></span></a>
-    <a class="doc" href="consensus-networking.html"><span class="e">⚖️</span><span><b>Consensus &amp; net</b><small>Aurora BFT, encrypted gossip</small></span></a>
-    <a class="doc" href="add-ons.html"><span class="e">🧩</span><span><b>Add-ons (Prisms)</b><small>All nine + economics</small></span></a>
-    <a class="doc" href="ai-ollama.html"><span class="e">🧠</span><span><b>AI via Ollama</b><small>Run real local models</small></span></a>
-    <a class="doc" href="security.html"><span class="e">🛡️</span><span><b>Security model</b><small>Threat model + safe usage</small></span></a>
-    <a class="doc" href="audit-2026-06.html"><span class="e">📋</span><span><b>Internal audit</b><small>June 2026 — findings &amp; fixes</small></span></a>
-    <a class="doc" href="roadmap.html"><span class="e">🗺️</span><span><b>Roadmap</b><small>What comes next</small></span></a>
-    <a class="doc" href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/CHANGELOG.md"><span class="e">📝</span><span><b>Changelog</b><small>Version history</small></span></a>
+    <a class="doc" href="INSTALL.html"><span class="e"><i data-lucide="rocket"></i></span><span><b>Install, build &amp; run</b><small>Get a node up in minutes</small></span></a>
+    <a class="doc" href="architecture.html"><span class="e"><i data-lucide="layout-grid"></i></span><span><b>Architecture</b><small>Cascade, state model, design</small></span></a>
+    <a class="doc" href="evm-compat.html"><span class="e"><i data-lucide="file-code-2"></i></span><span><b>EVM compatibility</b><small>MetaMask &amp; ethers.js</small></span></a>
+    <a class="doc" href="rpc-sdk.html"><span class="e"><i data-lucide="plug"></i></span><span><b>RPC &amp; SDKs</b><small>JSON-RPC + Rust/TS</small></span></a>
+    <a class="doc" href="privacy-model.html"><span class="e"><i data-lucide="shield-check"></i></span><span><b>Privacy model</b><small>VeilLedger, banking-grade</small></span></a>
+    <a class="doc" href="consensus-networking.html"><span class="e"><i data-lucide="scale"></i></span><span><b>Consensus &amp; net</b><small>Aurora BFT, encrypted gossip</small></span></a>
+    <a class="doc" href="add-ons.html"><span class="e"><i data-lucide="blocks"></i></span><span><b>Add-ons (Prisms)</b><small>All nine + economics</small></span></a>
+    <a class="doc" href="ai-ollama.html"><span class="e"><i data-lucide="brain-circuit"></i></span><span><b>AI via Ollama</b><small>Run real local models</small></span></a>
+    <a class="doc" href="security.html"><span class="e"><i data-lucide="shield"></i></span><span><b>Security model</b><small>Threat model + safe usage</small></span></a>
+    <a class="doc" href="audit-2026-06.html"><span class="e"><i data-lucide="clipboard-check"></i></span><span><b>Internal audit</b><small>June 2026 — findings &amp; fixes</small></span></a>
+    <a class="doc" href="roadmap.html"><span class="e"><i data-lucide="map"></i></span><span><b>Roadmap</b><small>What comes next</small></span></a>
+    <a class="doc" href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/CHANGELOG.md"><span class="e"><i data-lucide="scroll-text"></i></span><span><b>Changelog</b><small>Version history</small></span></a>
   </div>
   <div class="note">
     <b>Honest status.</b> VEILUX is a fully functional, test-covered <b>testnet-grade core</b>.
@@ -292,8 +297,8 @@
     <h2>Build something private.</h2>
     <p class="sub" style="margin-bottom:30px">Clone the repo, build the binary, and have a private, EVM-compatible chain running locally in a minute.</p>
     <div class="cta" style="margin-top:0">
-      <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary">★ Star on GitHub</a>
-      <a class="btn btn-ghost" href="INSTALL.html">Read the install guide</a>
+      <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary"><i data-lucide="star"></i> Star on GitHub</a>
+      <a class="btn btn-ghost" href="INSTALL.html"><i data-lucide="book-open"></i> Read the install guide</a>
     </div>
   </div>
 </div></section>
@@ -308,5 +313,9 @@
   · featherweight · privacy-first · AI-native</div>
 </div></footer>
 
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+  if (window.lucide) { lucide.createIcons(); }
+</script>
 </body>
 </html>
