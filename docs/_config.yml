@@ -1,0 +1,8 @@
+title: VEILUX
+description: A featherweight, privacy-first, AI-native Layer-1 blockchain written in Rust.
+theme: jekyll-theme-cayman
+show_downloads: true
+google_analytics:
+markdown: kramdown
+kramdown:
+  syntax_highlighter: rouge
