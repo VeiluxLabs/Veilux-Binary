@@ -19,15 +19,30 @@ pub enum VmError {
     Reverted,
     #[error("memory limit exceeded")]
     MemoryLimit,
+    #[error("state-modifying opcode in a static call")]
+    StaticViolation,
+    #[error("call depth limit exceeded")]
+    CallDepth,
 }
 
 const MAX_STACK: usize = 1024;
 const MAX_MEMORY: usize = 1 << 20;
+const MAX_CALL_DEPTH: u32 = 64;
+const MAX_CODE_SIZE: usize = 24_576;
 
 #[derive(Clone, Debug, Default)]
 pub struct Log {
+    pub address: U256,
     pub topics: Vec<U256>,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallKind {
+    Call,
+    CallCode,
+    DelegateCall,
+    StaticCall,
 }
 
 pub struct CallContext {
@@ -45,6 +60,23 @@ pub trait Host {
     fn block_number(&self) -> u64;
     fn block_timestamp(&self) -> u64;
     fn chain_id(&self) -> u64;
+
+    fn code(&self, _address: &U256) -> Vec<u8> {
+        Vec::new()
+    }
+    fn set_code(&mut self, _address: &U256, _code: Vec<u8>) {}
+    fn account_nonce(&self, _address: &U256) -> u64 {
+        0
+    }
+    fn bump_nonce(&mut self, _address: &U256) {}
+    fn transfer(&mut self, _from: &U256, _to: &U256, _value: U256) -> bool {
+        true
+    }
+    fn snapshot(&mut self) -> usize {
+        0
+    }
+    fn revert(&mut self, _snapshot: usize) {}
+    fn commit_snapshot(&mut self, _snapshot: usize) {}
 }
 
 #[derive(Debug)]
@@ -67,6 +99,9 @@ pub struct Interpreter<'a, H: Host> {
     host: &'a mut H,
     logs: Vec<Log>,
     return_data: Vec<u8>,
+    ret_buffer: Vec<u8>,
+    depth: u32,
+    is_static: bool,
 }
 
 fn analyze_jumpdests(code: &[u8]) -> Vec<bool> {
@@ -93,6 +128,66 @@ pub fn keccak256(bytes: &[u8]) -> [u8; 32] {
     out
 }
 
+fn addr20(v: &U256) -> [u8; 20] {
+    let b = v.to_big_endian();
+    let mut a = [0u8; 20];
+    a.copy_from_slice(&b[12..]);
+    a
+}
+
+fn addr_to_u256(addr: &[u8; 20]) -> U256 {
+    let mut buf = [0u8; 32];
+    buf[12..].copy_from_slice(addr);
+    U256::from_big_endian(&buf)
+}
+
+pub fn create_address(sender: &U256, nonce: u64) -> U256 {
+    let s = addr20(sender);
+    let nonce_bytes = if nonce == 0 {
+        vec![]
+    } else {
+        nonce
+            .to_be_bytes()
+            .iter()
+            .copied()
+            .skip_while(|&b| b == 0)
+            .collect::<Vec<u8>>()
+    };
+    let rlp = crate::rlp::encode_list(&[
+        crate::rlp::encode_str(&s),
+        crate::rlp::encode_str(&nonce_bytes),
+    ]);
+    let h = keccak256(&rlp);
+    let mut a = [0u8; 20];
+    a.copy_from_slice(&h[12..]);
+    addr_to_u256(&a)
+}
+
+pub fn create2_address(sender: &U256, salt: &U256, init_code: &[u8]) -> U256 {
+    let mut buf = Vec::with_capacity(1 + 20 + 32 + 32);
+    buf.push(0xff);
+    buf.extend_from_slice(&addr20(sender));
+    buf.extend_from_slice(&salt.to_big_endian());
+    buf.extend_from_slice(&keccak256(init_code));
+    let h = keccak256(&buf);
+    let mut a = [0u8; 20];
+    a.copy_from_slice(&h[12..]);
+    addr_to_u256(&a)
+}
+
+pub fn execute_frame<H: Host>(
+    code: &[u8],
+    ctx: &CallContext,
+    host: &mut H,
+    depth: u32,
+    is_static: bool,
+) -> Result<ExecOutcome, VmError> {
+    let mut interp = Interpreter::new(code, ctx, host);
+    interp.depth = depth;
+    interp.is_static = is_static;
+    interp.run()
+}
+
 impl<'a, H: Host> Interpreter<'a, H> {
     pub fn new(code: &'a [u8], ctx: &'a CallContext, host: &'a mut H) -> Self {
         Interpreter {
@@ -107,6 +202,9 @@ impl<'a, H: Host> Interpreter<'a, H> {
             host,
             logs: Vec::new(),
             return_data: Vec::new(),
+            ret_buffer: Vec::new(),
+            depth: 0,
+            is_static: false,
         }
     }
 
@@ -238,9 +336,18 @@ impl<'a, H: Host> Interpreter<'a, H> {
                 0x38 => self.push(U256::from_u64(self.code.len() as u64))?,
                 0x39 => self.codecopy()?,
                 0x3a => self.push(U256::ZERO)?,
+                0x3b => self.extcodesize()?,
+                0x3c => self.extcodecopy()?,
+                0x3d => self.push(U256::from_u64(self.ret_buffer.len() as u64))?,
+                0x3e => self.returndatacopy()?,
+                0x3f => self.extcodehash()?,
                 0x43 => self.push(U256::from_u64(self.host.block_number()))?,
                 0x42 => self.push(U256::from_u64(self.host.block_timestamp()))?,
                 0x46 => self.push(U256::from_u64(self.host.chain_id()))?,
+                0x47 => {
+                    let a = self.host.balance(&self.ctx.address);
+                    self.push(a)?;
+                }
                 0x50 => {
                     self.pop()?;
                 }
@@ -253,6 +360,9 @@ impl<'a, H: Host> Interpreter<'a, H> {
                     self.push(v)?;
                 }
                 0x55 => {
+                    if self.is_static {
+                        return Err(VmError::StaticViolation);
+                    }
                     self.charge(20_000)?;
                     let key = self.pop()?;
                     let val = self.pop()?;
@@ -303,7 +413,18 @@ impl<'a, H: Host> Interpreter<'a, H> {
                     }
                     self.stack.swap(len - 1, len - 1 - n);
                 }
-                0xa0..=0xa4 => self.log_op(op - 0xa0)?,
+                0xa0..=0xa4 => {
+                    if self.is_static {
+                        return Err(VmError::StaticViolation);
+                    }
+                    self.log_op(op - 0xa0)?
+                }
+                0xf0 => self.do_create(false)?,
+                0xf5 => self.do_create(true)?,
+                0xf1 => self.do_call(CallKind::Call)?,
+                0xf2 => self.do_call(CallKind::CallCode)?,
+                0xf4 => self.do_call(CallKind::DelegateCall)?,
+                0xfa => self.do_call(CallKind::StaticCall)?,
                 0xf3 => {
                     let (off, len) = (self.pop()?, self.pop()?);
                     self.return_data = self.mem_load(off.low_usize(), len.low_usize())?;
@@ -315,16 +436,211 @@ impl<'a, H: Host> Interpreter<'a, H> {
                     return Err(VmError::Reverted);
                 }
                 0xfe => return Err(VmError::InvalidOpcode(0xfe)),
-                0x3d => self.push(U256::ZERO)?,
-                0x3e => {
-                    self.pop()?;
-                    self.pop()?;
-                    self.pop()?;
+                0xff => {
+                    if self.is_static {
+                        return Err(VmError::StaticViolation);
+                    }
+                    let beneficiary = self.pop()?;
+                    let bal = self.host.balance(&self.ctx.address);
+                    if !bal.is_zero() {
+                        self.host.transfer(&self.ctx.address, &beneficiary, bal);
+                    }
+                    return Ok(());
                 }
                 _ => return Err(VmError::InvalidOpcode(op)),
             }
             self.pc += 1;
         }
+    }
+
+    fn do_call(&mut self, kind: CallKind) -> Result<(), VmError> {
+        self.charge(100)?;
+        let gas = self.pop()?;
+        let target = self.pop()?;
+        let value = match kind {
+            CallKind::Call | CallKind::CallCode => self.pop()?,
+            CallKind::DelegateCall | CallKind::StaticCall => U256::ZERO,
+        };
+        let args_off = self.pop()?.low_usize();
+        let args_len = self.pop()?.low_usize();
+        let ret_off = self.pop()?.low_usize();
+        let ret_len = self.pop()?.low_usize();
+
+        if self.is_static && !value.is_zero() {
+            return Err(VmError::StaticViolation);
+        }
+
+        let calldata = self.mem_load(args_off, args_len)?;
+
+        if self.depth >= MAX_CALL_DEPTH {
+            self.ret_buffer.clear();
+            return self.push(U256::ZERO);
+        }
+
+        let (storage_addr, code_addr, caller, call_value, sub_static) = match kind {
+            CallKind::Call => (target, target, self.ctx.address, value, self.is_static),
+            CallKind::StaticCall => (target, target, self.ctx.address, U256::ZERO, true),
+            CallKind::DelegateCall => (
+                self.ctx.address,
+                target,
+                self.ctx.caller,
+                self.ctx.value,
+                self.is_static,
+            ),
+            CallKind::CallCode => (
+                self.ctx.address,
+                target,
+                self.ctx.address,
+                value,
+                self.is_static,
+            ),
+        };
+
+        let snap = self.host.snapshot();
+        if kind == CallKind::Call && !call_value.is_zero() {
+            if self.host.balance(&self.ctx.address).lt(&call_value) {
+                self.host.revert(snap);
+                self.ret_buffer.clear();
+                return self.push(U256::ZERO);
+            }
+            self.host.transfer(&self.ctx.address, &target, call_value);
+        }
+
+        let code = self.host.code(&code_addr);
+        if code.is_empty() {
+            self.host.commit_snapshot(snap);
+            self.ret_buffer.clear();
+            return self.push(U256::ONE);
+        }
+
+        let forwarded = self
+            .gas_limit
+            .saturating_sub(self.gas)
+            .min(gas.low_u64_saturating());
+        let subctx = CallContext {
+            caller,
+            address: storage_addr,
+            value: call_value,
+            calldata,
+            gas_limit: forwarded.max(1),
+        };
+        let outcome = execute_frame(&code, &subctx, self.host, self.depth + 1, sub_static)?;
+        self.charge(outcome.gas_used)?;
+        if outcome.success {
+            self.host.commit_snapshot(snap);
+            self.logs.extend(outcome.logs);
+        } else {
+            self.host.revert(snap);
+        }
+        self.ret_buffer = outcome.return_data.clone();
+        let n = ret_len.min(outcome.return_data.len());
+        if n > 0 {
+            self.mem_store(ret_off, &outcome.return_data[..n])?;
+        }
+        self.push(bool_u(outcome.success))
+    }
+
+    fn do_create(&mut self, is_create2: bool) -> Result<(), VmError> {
+        if self.is_static {
+            return Err(VmError::StaticViolation);
+        }
+        self.charge(32_000)?;
+        let value = self.pop()?;
+        let off = self.pop()?.low_usize();
+        let len = self.pop()?.low_usize();
+        let salt = if is_create2 { Some(self.pop()?) } else { None };
+        let init = self.mem_load(off, len)?;
+
+        if self.depth >= MAX_CALL_DEPTH {
+            self.ret_buffer.clear();
+            return self.push(U256::ZERO);
+        }
+
+        let sender = self.ctx.address;
+        let new_addr = match &salt {
+            Some(s) => create2_address(&sender, s, &init),
+            None => {
+                let nonce = self.host.account_nonce(&sender);
+                create_address(&sender, nonce)
+            }
+        };
+        self.host.bump_nonce(&sender);
+
+        let snap = self.host.snapshot();
+        if !value.is_zero() {
+            if self.host.balance(&sender).lt(&value) {
+                self.host.revert(snap);
+                self.ret_buffer.clear();
+                return self.push(U256::ZERO);
+            }
+            self.host.transfer(&sender, &new_addr, value);
+        }
+
+        let subctx = CallContext {
+            caller: sender,
+            address: new_addr,
+            value,
+            calldata: vec![],
+            gas_limit: self.gas_limit.saturating_sub(self.gas).max(1),
+        };
+        let outcome = execute_frame(&init, &subctx, self.host, self.depth + 1, false)?;
+        self.charge(outcome.gas_used)?;
+
+        if outcome.success && outcome.return_data.len() <= MAX_CODE_SIZE {
+            self.host.set_code(&new_addr, outcome.return_data.clone());
+            self.host.commit_snapshot(snap);
+            self.logs.extend(outcome.logs);
+            self.ret_buffer.clear();
+            self.push(new_addr)
+        } else {
+            self.host.revert(snap);
+            self.ret_buffer = outcome.return_data;
+            self.push(U256::ZERO)
+        }
+    }
+
+    fn extcodesize(&mut self) -> Result<(), VmError> {
+        let a = self.pop()?;
+        let code = self.host.code(&a);
+        self.push(U256::from_u64(code.len() as u64))
+    }
+
+    fn extcodecopy(&mut self) -> Result<(), VmError> {
+        let a = self.pop()?;
+        let dest = self.pop()?.low_usize();
+        let off = self.pop()?.low_usize();
+        let len = self.pop()?.low_usize();
+        let code = self.host.code(&a);
+        let mut data = vec![0u8; len];
+        for (i, b) in data.iter_mut().enumerate() {
+            if let Some(v) = code.get(off + i) {
+                *b = *v;
+            }
+        }
+        self.mem_store(dest, &data)
+    }
+
+    fn extcodehash(&mut self) -> Result<(), VmError> {
+        let a = self.pop()?;
+        let code = self.host.code(&a);
+        if code.is_empty() {
+            self.push(U256::ZERO)
+        } else {
+            self.push(U256::from_big_endian(&keccak256(&code)))
+        }
+    }
+
+    fn returndatacopy(&mut self) -> Result<(), VmError> {
+        let dest = self.pop()?.low_usize();
+        let off = self.pop()?.low_usize();
+        let len = self.pop()?.low_usize();
+        let mut data = vec![0u8; len];
+        for (i, b) in data.iter_mut().enumerate() {
+            if let Some(v) = self.ret_buffer.get(off + i) {
+                *b = *v;
+            }
+        }
+        self.mem_store(dest, &data)
     }
 
     fn bin<F: Fn(U256, U256) -> U256>(&mut self, f: F) -> Result<(), VmError> {
@@ -530,7 +846,11 @@ impl<'a, H: Host> Interpreter<'a, H> {
         }
         let data = self.mem_load(off, len)?;
         self.charge(375 * topic_count as u64 + 8 * len as u64)?;
-        self.logs.push(Log { topics, data });
+        self.logs.push(Log {
+            address: self.ctx.address,
+            topics,
+            data,
+        });
         Ok(())
     }
 }
@@ -576,17 +896,28 @@ fn base_gas(op: u8) -> u64 {
         0x20 => 30,
         0x51..=0x53 => 3,
         0x56 | 0x57 => 8,
+        0x3b | 0x3c | 0x3f => 100,
         _ => 2,
     }
 }
+
+type Snapshot = (
+    HashMap<(U256, U256), U256>,
+    HashMap<U256, U256>,
+    HashMap<U256, Vec<u8>>,
+    HashMap<U256, u64>,
+);
 
 #[derive(Default)]
 pub struct MemHost {
     pub storage: HashMap<(U256, U256), U256>,
     pub balances: HashMap<U256, U256>,
+    pub codes: HashMap<U256, Vec<u8>>,
+    pub nonces: HashMap<U256, u64>,
     pub block_number: u64,
     pub timestamp: u64,
     pub chain_id: u64,
+    snapshots: Vec<Snapshot>,
 }
 
 impl Host for MemHost {
@@ -610,6 +941,54 @@ impl Host for MemHost {
     }
     fn chain_id(&self) -> u64 {
         self.chain_id
+    }
+    fn code(&self, address: &U256) -> Vec<u8> {
+        self.codes.get(address).cloned().unwrap_or_default()
+    }
+    fn set_code(&mut self, address: &U256, code: Vec<u8>) {
+        self.codes.insert(*address, code);
+    }
+    fn account_nonce(&self, address: &U256) -> u64 {
+        self.nonces.get(address).copied().unwrap_or(0)
+    }
+    fn bump_nonce(&mut self, address: &U256) {
+        *self.nonces.entry(*address).or_insert(0) += 1;
+    }
+    fn transfer(&mut self, from: &U256, to: &U256, value: U256) -> bool {
+        let bal = self.balances.get(from).copied().unwrap_or(U256::ZERO);
+        if bal.lt(&value) {
+            return false;
+        }
+        self.balances.insert(*from, bal.wrapping_sub(value));
+        let tb = self.balances.get(to).copied().unwrap_or(U256::ZERO);
+        self.balances.insert(*to, tb.wrapping_add(value));
+        true
+    }
+    fn snapshot(&mut self) -> usize {
+        self.snapshots.push((
+            self.storage.clone(),
+            self.balances.clone(),
+            self.codes.clone(),
+            self.nonces.clone(),
+        ));
+        self.snapshots.len()
+    }
+    fn revert(&mut self, snapshot: usize) {
+        while self.snapshots.len() >= snapshot && !self.snapshots.is_empty() {
+            let (s, b, c, n) = self.snapshots.pop().unwrap();
+            if self.snapshots.len() + 1 == snapshot {
+                self.storage = s;
+                self.balances = b;
+                self.codes = c;
+                self.nonces = n;
+                return;
+            }
+        }
+    }
+    fn commit_snapshot(&mut self, snapshot: usize) {
+        if self.snapshots.len() >= snapshot && !self.snapshots.is_empty() {
+            self.snapshots.truncate(snapshot - 1);
+        }
     }
 }
 
@@ -820,5 +1199,207 @@ mod tests {
         };
         let result = Interpreter::new(&code, &ctx, &mut host).run();
         assert!(matches!(result, Err(VmError::StackUnderflow)));
+    }
+
+    #[test]
+    fn static_call_blocks_sstore() {
+        let code = hex::decode("602a600055").unwrap();
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+        let ctx = CallContext {
+            caller: U256::ZERO,
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 1_000_000,
+        };
+        let result = execute_frame(&code, &ctx, &mut host, 0, true);
+        assert!(
+            matches!(result, Err(VmError::StaticViolation)),
+            "SSTORE inside a static call must be rejected: {result:?}"
+        );
+    }
+
+    #[test]
+    fn contract_calls_another_contract_and_reads_return() {
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+
+        let callee = hex::decode("604560005260206000f3").unwrap();
+        let callee_addr = U256::from_u64(0xbeef);
+        host.set_code(&callee_addr, callee);
+
+        let mut caller_code = Vec::new();
+        caller_code.extend_from_slice(&[0x60, 0x20]);
+        caller_code.extend_from_slice(&[0x60, 0x00]);
+        caller_code.extend_from_slice(&[0x60, 0x00]);
+        caller_code.extend_from_slice(&[0x60, 0x00]);
+        caller_code.extend_from_slice(&[0x60, 0x00]);
+        caller_code.extend_from_slice(&[0x61, 0xbe, 0xef]);
+        caller_code.extend_from_slice(&[0x62, 0x0f, 0x42, 0x40]);
+        caller_code.push(0xf1);
+        caller_code.push(0x50);
+        caller_code.extend_from_slice(&[0x60, 0x20, 0x60, 0x00, 0xf3]);
+
+        let ctx = CallContext {
+            caller: U256::from_u64(0xcafe),
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 10_000_000,
+        };
+        let out = Interpreter::new(&caller_code, &ctx, &mut host)
+            .run()
+            .unwrap();
+        assert!(out.success, "outer execution must succeed");
+        assert_eq!(
+            U256::from_big_endian(&out.return_data),
+            U256::from_u64(0x45),
+            "the caller must return the value (0x45) the callee wrote into its return buffer via CALL"
+        );
+    }
+
+    #[test]
+    fn delegatecall_runs_callee_code_in_caller_storage() {
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+
+        let lib = hex::decode("602a600055").unwrap();
+        let lib_addr = U256::from_u64(0xabcd);
+        host.set_code(&lib_addr, lib);
+
+        let mut code = Vec::new();
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x61, 0xab, 0xcd]);
+        code.extend_from_slice(&[0x62, 0x0f, 0x42, 0x40]);
+        code.push(0xf4);
+        code.push(0x00);
+
+        let self_addr = U256::from_u64(0x1234);
+        let ctx = CallContext {
+            caller: U256::from_u64(0xcafe),
+            address: self_addr,
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 10_000_000,
+        };
+        let out = Interpreter::new(&code, &ctx, &mut host).run().unwrap();
+        assert!(out.success);
+        assert_eq!(
+            host.sload(&self_addr, &U256::ZERO),
+            U256::from_u64(42),
+            "DELEGATECALL must run the library's SSTORE against the CALLER's storage, not the library's"
+        );
+        assert_eq!(
+            host.sload(&lib_addr, &U256::ZERO),
+            U256::ZERO,
+            "the library's own storage must stay untouched under DELEGATECALL"
+        );
+    }
+
+    #[test]
+    fn create2_deploys_at_deterministic_address() {
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+
+        let runtime = hex::decode("602a60005260206000f3").unwrap();
+        let rt_len = runtime.len();
+        let mut init = Vec::new();
+        init.extend_from_slice(&[0x60, rt_len as u8]);
+        init.extend_from_slice(&[0x60, 0x0c]);
+        init.extend_from_slice(&[0x60, 0x00]);
+        init.push(0x39);
+        init.extend_from_slice(&[0x60, rt_len as u8]);
+        init.extend_from_slice(&[0x60, 0x00]);
+        init.push(0xf3);
+        assert_eq!(
+            init.len(),
+            12,
+            "init prologue must be 12 bytes before runtime"
+        );
+        init.extend_from_slice(&runtime);
+
+        let sender = U256::from_u64(0x1234);
+        let salt = U256::from_u64(0x9999);
+        let expected = create2_address(&sender, &salt, &init);
+
+        let ctx = CallContext {
+            caller: U256::from_u64(0xcafe),
+            address: sender,
+            value: U256::ZERO,
+            calldata: init.clone(),
+            gas_limit: 10_000_000,
+        };
+        let mut create_code = Vec::new();
+        create_code.extend_from_slice(&[0x60, init.len() as u8]);
+        create_code.extend_from_slice(&[0x60, 0x00]);
+        create_code.extend_from_slice(&[0x60, 0x00]);
+        create_code.push(0x37);
+        create_code.extend_from_slice(&[0x61, 0x99, 0x99]);
+        create_code.extend_from_slice(&[0x60, init.len() as u8]);
+        create_code.extend_from_slice(&[0x60, 0x00]);
+        create_code.extend_from_slice(&[0x60, 0x00]);
+        create_code.push(0xf5);
+        create_code.extend_from_slice(&[0x60, 0x00, 0x52]);
+        create_code.extend_from_slice(&[0x60, 0x20, 0x60, 0x00, 0xf3]);
+
+        let out = Interpreter::new(&create_code, &ctx, &mut host)
+            .run()
+            .unwrap();
+        assert!(out.success, "CREATE2 frame must succeed");
+        let returned = U256::from_big_endian(&out.return_data);
+        assert_eq!(
+            returned, expected,
+            "CREATE2 must deploy at keccak256(0xff++sender++salt++keccak(init))[12..]"
+        );
+        assert_eq!(
+            host.code(&expected),
+            runtime,
+            "the deployed runtime code must match what the init code returned"
+        );
+    }
+
+    #[test]
+    fn call_depth_is_bounded() {
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+        let self_addr = U256::from_u64(0x1234);
+        let mut code = Vec::new();
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x61, 0x12, 0x34]);
+        code.extend_from_slice(&[0x62, 0x0f, 0x42, 0x40]);
+        code.push(0xf1);
+        code.push(0x00);
+        host.set_code(&self_addr, code.clone());
+
+        let ctx = CallContext {
+            caller: U256::from_u64(0xcafe),
+            address: self_addr,
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 500_000_000,
+        };
+        let result = execute_frame(&code, &ctx, &mut host, 0, false);
+        assert!(
+            result.is_ok(),
+            "recursive self-calls must terminate via depth/gas bound, not overflow the native stack: {result:?}"
+        );
     }
 }

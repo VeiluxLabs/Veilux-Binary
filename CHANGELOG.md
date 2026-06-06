@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-06
+
+### Added
+- **Full EVM execution — inter-contract calls and contract creation.** The
+  `veilux-evm` interpreter now implements `CALL`, `CALLCODE`, `DELEGATECALL`,
+  `STATICCALL`, `CREATE`, and `CREATE2`, plus `EXTCODESIZE`/`EXTCODECOPY`/
+  `EXTCODEHASH`, `RETURNDATASIZE`/`RETURNDATACOPY`, `SELFBALANCE`, and
+  `SELFDESTRUCT`. The `Host` trait gained code/nonce/transfer/snapshot/revert, and
+  the node's `StateHost` implements them against the `StateTree`. This makes real
+  multi-contract Solidity work: a contract can call another contract and use its
+  return value, `DELEGATECALL` runs library/proxy code against the caller's
+  storage (and leaves the library's own storage untouched), `STATICCALL` forbids
+  state mutation, value-bearing calls isolate storage, and `CREATE`/`CREATE2`
+  deploy children at the canonical addresses. Sub-call failures roll back via a
+  state snapshot while the caller continues; call depth is bounded at 64 so deep
+  recursion can never overflow the native stack. Verified end to end through the
+  node: a deployed contract `CALL`s a second deployed contract over RPC-applied
+  transactions and returns its result. New tests:
+  `contract_calls_another_contract_and_reads_return`,
+  `delegatecall_runs_callee_code_in_caller_storage`,
+  `create2_deploys_at_deterministic_address`, `static_call_blocks_sstore`,
+  `call_depth_is_bounded`, and `eth::tests::inter_contract_call_works_end_to_end`.
+
+### Security
+- **`STATICCALL` is enforced at the opcode level** — `SSTORE`, `LOG*`, `CREATE*`,
+  and `SELFDESTRUCT` inside a static context revert (`StaticViolation`),
+  preventing read-only calls from mutating state.
+- Sub-call gas is forwarded from the caller's remaining budget and the overall
+  30M cap still applies, so nested calls cannot escape the DoS bound.
+
 ## [0.6.1] - 2026-06-06
 
 ### Added
@@ -434,7 +464,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.0...v0.5.1

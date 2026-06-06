@@ -1,7 +1,7 @@
 use prism_token::{move_balance, native_token_id};
 use std::time::{SystemTime, UNIX_EPOCH};
 use veilux_evm::u256::U256;
-use veilux_evm::vm::{CallContext, Host, Interpreter, Log};
+use veilux_evm::vm::{CallContext, Host, Log};
 use veilux_evm::{decode_legacy_tx, keccak256, EvmError};
 use veilux_kernel::{Block, Hash, PartyId, StateTree};
 
@@ -117,6 +117,19 @@ struct StateHost<'a> {
     chain_id: u64,
     block_number: u64,
     timestamp: u64,
+    snapshots: Vec<StateTree>,
+}
+
+impl<'a> StateHost<'a> {
+    fn new(state: &'a mut StateTree, chain_id: u64, block_number: u64, timestamp: u64) -> Self {
+        StateHost {
+            state,
+            chain_id,
+            block_number,
+            timestamp,
+            snapshots: Vec::new(),
+        }
+    }
 }
 
 impl Host for StateHost<'_> {
@@ -151,6 +164,58 @@ impl Host for StateHost<'_> {
     fn chain_id(&self) -> u64 {
         self.chain_id
     }
+    fn code(&self, address: &U256) -> Vec<u8> {
+        eth_code(self.state, &u256_to_addr(address))
+    }
+    fn set_code(&mut self, address: &U256, code: Vec<u8>) {
+        let addr = u256_to_addr(address);
+        let _ = self.state.put_json(code_key(&addr), &hex::encode(&code));
+    }
+    fn account_nonce(&self, address: &U256) -> u64 {
+        eth_nonce(self.state, &u256_to_addr(address))
+    }
+    fn bump_nonce(&mut self, address: &U256) {
+        let addr = u256_to_addr(address);
+        let next = eth_nonce(self.state, &addr) + 1;
+        let _ = self.state.put_json(nonce_key(&addr), &next.to_string());
+    }
+    fn transfer(&mut self, from: &U256, to: &U256, value: U256) -> bool {
+        if value.is_zero() {
+            return true;
+        }
+        let v = u256_low_u128(&value);
+        move_balance(
+            self.state,
+            &native_token_id(),
+            &eth_party(&u256_to_addr(from)),
+            &eth_party(&u256_to_addr(to)),
+            v,
+        )
+        .is_ok()
+    }
+    fn snapshot(&mut self) -> usize {
+        self.snapshots.push(self.state.clone());
+        self.snapshots.len()
+    }
+    fn revert(&mut self, snapshot: usize) {
+        if snapshot >= 1 && snapshot <= self.snapshots.len() {
+            let restored = self.snapshots[snapshot - 1].clone();
+            *self.state = restored;
+            self.snapshots.truncate(snapshot - 1);
+        }
+    }
+    fn commit_snapshot(&mut self, snapshot: usize) {
+        if snapshot >= 1 && snapshot <= self.snapshots.len() {
+            self.snapshots.truncate(snapshot - 1);
+        }
+    }
+}
+
+fn u256_low_u128(v: &U256) -> u128 {
+    let b = v.to_big_endian();
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&b[16..]);
+    u128::from_be_bytes(out)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -188,12 +253,12 @@ impl Node {
             return Ok(vec![]);
         }
         let mut probe = self.state.clone();
-        let mut host = StateHost {
-            state: &mut probe,
-            chain_id: self.chain_id,
-            block_number: self.head().height,
-            timestamp: self.head().timestamp,
-        };
+        let mut host = StateHost::new(
+            &mut probe,
+            self.chain_id,
+            self.head().height,
+            self.head().timestamp,
+        );
         let ctx = CallContext {
             caller: U256::ZERO,
             address: addr_to_u256(to),
@@ -201,8 +266,7 @@ impl Node {
             calldata,
             gas_limit: MAX_EVM_GAS,
         };
-        let out = Interpreter::new(&code, &ctx, &mut host)
-            .run()
+        let out = veilux_evm::vm::execute_frame(&code, &ctx, &mut host, 0, false)
             .map_err(|e| EthError::Vm(e.to_string()))?;
         Ok(out.return_data)
     }
@@ -237,12 +301,8 @@ impl Node {
         match tx.to {
             None => {
                 let new_addr = contract_address(&tx.from, tx.nonce);
-                let mut host = StateHost {
-                    state: &mut new_state,
-                    chain_id: self.chain_id,
-                    block_number,
-                    timestamp,
-                };
+                let mut host =
+                    StateHost::new(&mut new_state, self.chain_id, block_number, timestamp);
                 let ctx = CallContext {
                     caller: addr_to_u256(&tx.from),
                     address: addr_to_u256(&new_addr),
@@ -250,8 +310,7 @@ impl Node {
                     calldata: tx.data.clone(),
                     gas_limit: tx.gas_limit.clamp(21_000, MAX_EVM_GAS),
                 };
-                let out = Interpreter::new(&tx.data, &ctx, &mut host)
-                    .run()
+                let out = veilux_evm::vm::execute_frame(&tx.data, &ctx, &mut host, 0, false)
                     .map_err(|e| EthError::Vm(e.to_string()))?;
                 if !out.success {
                     return Err(EthError::Reverted);
@@ -297,12 +356,8 @@ impl Node {
                         )
                         .map_err(|e| EthError::Node(e.to_string()))?;
                     }
-                    let mut host = StateHost {
-                        state: &mut new_state,
-                        chain_id: self.chain_id,
-                        block_number,
-                        timestamp,
-                    };
+                    let mut host =
+                        StateHost::new(&mut new_state, self.chain_id, block_number, timestamp);
                     let ctx = CallContext {
                         caller: addr_to_u256(&tx.from),
                         address: addr_to_u256(&to),
@@ -310,8 +365,7 @@ impl Node {
                         calldata: tx.data.clone(),
                         gas_limit: tx.gas_limit.clamp(21_000, MAX_EVM_GAS),
                     };
-                    let out = Interpreter::new(&code, &ctx, &mut host)
-                        .run()
+                    let out = veilux_evm::vm::execute_frame(&code, &ctx, &mut host, 0, false)
                         .map_err(|e| EthError::Vm(e.to_string()))?;
                     if !out.success {
                         return Err(EthError::Reverted);
@@ -331,10 +385,7 @@ impl Node {
             .enumerate()
             .map(|(i, l)| {
                 serde_json::json!({
-                    "address": created
-                        .or(tx.to)
-                        .map(|a| format!("0x{}", hex::encode(a)))
-                        .unwrap_or_default(),
+                    "address": format!("0x{}", hex::encode(u256_to_addr(&l.address))),
                     "topics": l
                         .topics
                         .iter()
@@ -446,6 +497,77 @@ mod tests {
             &[],
         );
         n
+    }
+
+    fn init_returning(runtime: &[u8]) -> Vec<u8> {
+        let rt_len = runtime.len();
+        let mut init = Vec::new();
+        init.extend_from_slice(&[0x60, rt_len as u8]);
+        init.extend_from_slice(&[0x60, 0x0c]);
+        init.extend_from_slice(&[0x60, 0x00]);
+        init.push(0x39);
+        init.extend_from_slice(&[0x60, rt_len as u8]);
+        init.extend_from_slice(&[0x60, 0x00]);
+        init.push(0xf3);
+        assert_eq!(init.len(), 12);
+        init.extend_from_slice(runtime);
+        init
+    }
+
+    #[test]
+    fn inter_contract_call_works_end_to_end() {
+        let mut n = eth_node(7);
+        let sk = [21u8; 32];
+        let from = veilux_evm::address_from_secret(&sk).unwrap();
+
+        let callee_runtime = hex::decode("604560005260206000f3").unwrap();
+        let callee_addr = contract_address(&from, 0);
+        let deploy_callee = sign_legacy_tx(
+            &sk,
+            0,
+            1,
+            5_000_000,
+            None,
+            0,
+            &init_returning(&callee_runtime),
+            7,
+        )
+        .unwrap();
+        n.eth_apply_raw(&deploy_callee).expect("deploy callee");
+
+        let mut caller_runtime = Vec::new();
+        caller_runtime.extend_from_slice(&[0x60, 0x20]);
+        caller_runtime.extend_from_slice(&[0x60, 0x00]);
+        caller_runtime.extend_from_slice(&[0x60, 0x00]);
+        caller_runtime.extend_from_slice(&[0x60, 0x00]);
+        caller_runtime.extend_from_slice(&[0x60, 0x00]);
+        caller_runtime.push(0x73);
+        caller_runtime.extend_from_slice(&callee_addr);
+        caller_runtime.extend_from_slice(&[0x62, 0x0f, 0x42, 0x40]);
+        caller_runtime.push(0xf1);
+        caller_runtime.push(0x50);
+        caller_runtime.extend_from_slice(&[0x60, 0x20, 0x60, 0x00, 0xf3]);
+
+        let deploy_caller = sign_legacy_tx(
+            &sk,
+            1,
+            1,
+            5_000_000,
+            None,
+            0,
+            &init_returning(&caller_runtime),
+            7,
+        )
+        .unwrap();
+        let applied = n.eth_apply_raw(&deploy_caller).expect("deploy caller");
+        let caller_addr = applied.contract_address.expect("caller deployed");
+
+        let out = n.eth_call(&caller_addr, vec![]).expect("eth_call caller");
+        assert_eq!(
+            U256::from_big_endian(&out),
+            U256::from_u64(0x45),
+            "the caller contract must CALL the callee and return its value (0x45) end-to-end through the node StateHost"
+        );
     }
 
     #[test]

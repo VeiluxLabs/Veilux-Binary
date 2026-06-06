@@ -44,6 +44,14 @@ impl U256 {
         self.0[0]
     }
 
+    pub fn low_u64_saturating(&self) -> u64 {
+        if self.0[1] == 0 && self.0[2] == 0 && self.0[3] == 0 {
+            self.0[0]
+        } else {
+            u64::MAX
+        }
+    }
+
     pub fn low_usize(&self) -> usize {
         self.0[0] as usize
     }

@@ -47,7 +47,7 @@ execution, data availability, and settlement are distinct layers
 | **Restaking / Shared Security Prism** | let LUX stake secure external services (oracles, bridges, DA) | Programmable security as a primitive |
 | **Chain Abstraction Prism** | one UX across many chains; intents routed/settled behind the scenes | Account + chain abstraction together approach car-like ease of use ([Coinbureau](https://coinbureau.com/analysis/unifying-ethereum/)) |
 | **Bridge Prism** ✅ | guardian-attested cross-chain transfers (Cosmos, Solana, EVM, custom) | Shipped: relayer quorum, anti-replay, wrapped tokens. Next: light-client / ZK verification to reduce relayer trust |
-| **EVM/WASM Prism** 🔜 | run existing smart contracts as just-another-Prism | Partially shipped: the `veilux-evm` crate runs real EVM bytecode (deploy + call + `eth_call`, single contract frame) behind the `eth_*` shim. Next: inter-contract `CALL`/`CREATE`, then a WASM target. |
+| **EVM/WASM Prism** 🔜 | run existing smart contracts as just-another-Prism | Largely shipped: the `veilux-evm` crate runs real EVM bytecode behind the `eth_*` shim — deploy, call, `eth_call`, and full inter-contract `CALL`/`DELEGATECALL`/`STATICCALL`/`CREATE`/`CREATE2`. Next: precompiles (`ecrecover`/`sha256`/`modexp`), a fork-exact gas schedule, then a WASM target. |
 
 ---
 

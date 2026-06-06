@@ -37,8 +37,11 @@ Then in MetaMask → *Add network manually*:
   same derivation Ethereum uses.
 - **Contract calls.** A transaction to an address that holds code runs that
   runtime code with the tx `data` as calldata, executing genuine `SLOAD`/`SSTORE`
-  against persisted contract storage. `eth_call` runs the same path read-only
-  against a throwaway copy of state (no block produced, no nonce change).
+  against persisted contract storage. Contracts may **call other contracts**
+  (`CALL`/`DELEGATECALL`/`STATICCALL`) and **deploy new ones** (`CREATE`/
+  `CREATE2`); a sub-call that reverts rolls back through a state snapshot while
+  the caller continues. `eth_call` runs the same path read-only against a
+  throwaway copy of state (no block produced, no nonce change).
 - **Application.** Value (if any) moves native LUX from the recovered sender to
   the recipient, the EVM executes, the sender's eth nonce increments, a receipt
   (with `contractAddress`, `gasUsed`, `status`) is written, and a block is
@@ -52,17 +55,34 @@ A from-scratch, dependency-light interpreter (no `revm`):
   shifts (`SHL`/`SHR`/`SAR`), bitwise ops, `SIGNEXTEND`, `EXP`, comparisons.
 - **`Interpreter`** — the mainstream opcode set: arithmetic (incl. signed
   `SDIV`/`SMOD`/`SLT`/`SGT`), `KECCAK256`, environment/context (`ADDRESS`,
-  `CALLER`, `CALLVALUE`, `CALLDATA*`, `CODECOPY`, `NUMBER`, `TIMESTAMP`,
-  `CHAINID`, `GAS`), memory (`MLOAD`/`MSTORE`/`MSTORE8`), storage
+  `CALLER`, `CALLVALUE`, `CALLDATA*`, `CODECOPY`, `EXTCODESIZE`/`EXTCODECOPY`/
+  `EXTCODEHASH`, `RETURNDATASIZE`/`RETURNDATACOPY`, `NUMBER`, `TIMESTAMP`,
+  `CHAINID`, `GAS`, `SELFBALANCE`), memory (`MLOAD`/`MSTORE`/`MSTORE8`), storage
   (`SLOAD`/`SSTORE`), control flow (`JUMP`/`JUMPI` with jumpdest analysis),
-  `PUSH1`–`PUSH32`, `DUP1`–`DUP16`, `SWAP1`–`SWAP16`, `LOG0`–`LOG4`, and
-  `RETURN`/`REVERT`. Gas is metered and bounded; memory is capped.
+  `PUSH1`–`PUSH32`, `DUP1`–`DUP16`, `SWAP1`–`SWAP16`, `LOG0`–`LOG4`,
+  **inter-contract `CALL`/`CALLCODE`/`DELEGATECALL`/`STATICCALL`**, **contract
+  creation `CREATE`/`CREATE2`**, `SELFDESTRUCT`, and `RETURN`/`REVERT`. Gas is
+  metered and bounded; memory is capped; call depth is bounded (64) so recursion
+  can never overflow the native stack.
+- **Call semantics** are real: `DELEGATECALL` runs the callee's code against the
+  caller's storage and `msg.sender`/`msg.value` (the library/proxy pattern),
+  `STATICCALL` forbids state changes (`SSTORE`/`LOG`/`CREATE`/`SELFDESTRUCT`
+  revert), `CALL` transfers value and isolates storage, and a reverted sub-call
+  rolls back via a state snapshot while the caller keeps running.
+- **`CREATE`/`CREATE2`** deploy child contracts at the canonical addresses
+  (`keccak(rlp(sender,nonce))` and `keccak(0xff++sender++salt++keccak(init))`),
+  run the init code, and store the returned runtime — so factory and
+  deterministic-deployment patterns work.
 - **`Host` trait** — the node implements it (`StateHost`) to bridge EVM storage,
-  balances, and block context to the VEILUX `StateTree`.
+  balances, code, nonces, value transfers, and snapshot/revert to the VEILUX
+  `StateTree`.
 
 A 4-byte-selector dispatched storage contract (the classic Solidity
-`store(uint256)` / `retrieve()`) runs end to end: `store(424242)` then
-`retrieve()` returns `424242` via real `SSTORE`/`SLOAD` and ABI return encoding.
+`store(uint256)` / `retrieve()`) runs end to end, and inter-contract calls work:
+a deployed contract can `CALL` another deployed contract and return its result
+(verified end to end through the node's `StateHost`), `DELEGATECALL` runs library
+code against the caller's storage, and `CREATE2` deploys at the deterministic
+address.
 
 ## Supported methods
 
@@ -84,10 +104,13 @@ A 4-byte-selector dispatched storage contract (the classic Solidity
 
 ## Limitations (honest scope)
 
-- **No inter-contract calls yet.** `CALL`/`DELEGATECALL`/`STATICCALL`/`CREATE`
-  from within a running contract are not yet wired (the dispatch covers a single
-  contract frame). Single-contract storage/logic dApps run today; calling
-  another contract mid-execution is the next step.
+- **Gas schedule is simplified.** Gas is metered and bounded (so it is
+  DoS-safe), but the per-opcode costs are approximate rather than a byte-exact
+  match of a specific Ethereum hard fork. Contracts run correctly; absolute gas
+  numbers will differ from mainnet.
+- **No precompiled contracts yet** (`ecrecover`, `sha256`, `modexp`, the BN/BLS
+  pairing precompiles at addresses `0x01`–`0x0a`). Contracts that rely on them
+  will revert when calling those addresses.
 - **Legacy + EIP-155 transactions only.** Typed-envelope transactions
   (EIP-2718/1559, `0x02…`) are rejected; configure wallets to use legacy gas.
 - **Global chain-id uniqueness is a social convention.** To avoid clashes,
