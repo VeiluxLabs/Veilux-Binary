@@ -109,9 +109,10 @@ address.
   match of a specific Ethereum hard fork. Contracts run correctly; absolute gas
   numbers will differ from mainnet.
 - **Precompiles: `ecrecover` (0x01), `sha256` (0x02), `ripemd160` (0x03),
-  `identity` (0x04), and `modexp` (0x05) ship today.** The BN/BLS pairing
-  precompiles (`0x06`–`0x0a`) are not yet implemented; contracts that call those
-  addresses will get empty output.
+  `identity` (0x04), and `modexp` (0x05) ship today** and are reachable both from
+  within contract frames and via a direct `eth_call` to the precompile address.
+  The BN/BLS pairing precompiles (`0x06`–`0x0a`) are not yet implemented;
+  contracts that call those addresses will get empty output.
 - **Legacy + EIP-155 transactions only.** Typed-envelope transactions
   (EIP-2718/1559, `0x02…`) are rejected; configure wallets to use legacy gas.
 - **Global chain-id uniqueness is a social convention.** To avoid clashes,

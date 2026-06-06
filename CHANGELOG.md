@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-06-06
+
+### Fixed
+- **`eth_call` now routes directly to EVM precompiles.** A call to a precompile
+  address (`0x01`–`0x05`) via `eth_call` previously returned empty because the
+  handler only executed deployed contract bytecode. It now detects precompile
+  targets and runs them directly, matching the behaviour of Geth/standard
+  Ethereum nodes (e.g. `eth_call` to `0x03` with `"abc"` returns the `ripemd160`
+  digest). Precompiles invoked from within contract frames were already correct;
+  this only affects direct top-level calls. Tests:
+  `eth_call_routes_to_ripemd160_precompile`,
+  `eth_call_routes_to_identity_precompile`.
+
 ## [0.7.5] - 2026-06-06
 
 ### Added
@@ -650,7 +663,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.2...v0.7.3

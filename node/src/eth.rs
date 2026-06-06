@@ -248,6 +248,10 @@ pub struct EthApplied {
 
 impl Node {
     pub fn eth_call(&self, to: &[u8; 20], calldata: Vec<u8>) -> Result<Vec<u8>, EthError> {
+        let to_word = addr_to_u256(to);
+        if veilux_evm::precompile::is_precompile(&to_word) {
+            return Ok(veilux_evm::precompile::execute(&to_word, &calldata).unwrap_or_default());
+        }
         let code = eth_code(&self.state, to);
         if code.is_empty() {
             return Ok(vec![]);
@@ -568,6 +572,29 @@ mod tests {
             U256::from_u64(0x45),
             "the caller contract must CALL the callee and return its value (0x45) end-to-end through the node StateHost"
         );
+    }
+
+    #[test]
+    fn eth_call_routes_to_ripemd160_precompile() {
+        let n = eth_node(7);
+        let mut addr = [0u8; 20];
+        addr[19] = 3;
+        let out = n.eth_call(&addr, b"abc".to_vec()).expect("precompile call");
+        assert_eq!(
+            hex::encode(&out),
+            "0000000000000000000000008eb208f7e05d987a9b044a8e98c6b087f15a0bfc",
+            "eth_call to address 0x03 must execute the ripemd160 precompile directly"
+        );
+    }
+
+    #[test]
+    fn eth_call_routes_to_identity_precompile() {
+        let n = eth_node(7);
+        let mut addr = [0u8; 20];
+        addr[19] = 4;
+        let payload = vec![1u8, 2, 3, 4, 5];
+        let out = n.eth_call(&addr, payload.clone()).expect("identity call");
+        assert_eq!(out, payload, "address 0x04 echoes its input");
     }
 
     #[test]
