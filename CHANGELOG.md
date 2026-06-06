@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-06
+
+### Added
+- **X25519 key-wrapped confidential shares (no more shared-seed assumption).**
+  A `PrivateEnvelope` now carries an ephemeral X25519 public key; each
+  stakeholder's sealed share is encrypted under a key derived from the ECDH of
+  that ephemeral with the stakeholder's *static* X25519 key (derived from its
+  seed). Opening a share therefore requires the recipient's X25519 **secret key**
+  — holding the right party name with the wrong key fails to decrypt
+  (`wrong_key_cannot_open_even_if_named_stakeholder`).
+- **Signed private-root attestations + divergence detection.** After executing a
+  confidential transaction, a stakeholder signs a `(commitment, private_root)`
+  attestation (`RootAttestation`, Ed25519) and gossips it
+  (`NetMessage::PrivateRoot`). Every node keeps an `AttestationBook`; if two
+  stakeholders report different private roots for the same commitment it is
+  flagged (`AttestationOutcome::Divergence`) and logged as a
+  `PRIVATE-ROOT DIVERGENCE` warning. `veilux_privateRoot` now also reports the
+  attestation count and a `consistent` flag. **Verified live on a 3-validator
+  network:** a confidential tx submitted to one validator was gossiped so both
+  stakeholder validators (alice, bob) executed it to **byte-identical private
+  state** and cross-attested without divergence, while the non-stakeholder
+  validator held no private state.
+
+### Notes
+- A quorum/slashing penalty for a flagged private-root divergence is the next
+  step; today divergence is cryptographically detected and surfaced, not yet
+  punished on-chain.
+
 ## [0.6.5] - 2026-06-06
 
 ### Added
@@ -526,7 +554,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.5...v0.7.0
 [0.6.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.2...v0.6.3

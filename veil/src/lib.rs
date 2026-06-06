@@ -1,3 +1,4 @@
+pub mod attest;
 pub mod disclosure;
 pub mod identity;
 pub mod ledger;
@@ -5,12 +6,16 @@ pub mod private;
 pub mod projection;
 pub mod view;
 
+pub use attest::{AttestationBook, AttestationOutcome, RootAttestation};
 pub use disclosure::{audit_open, grant_disclosure, AuditableEntry, DisclosureGrant, GrantScope};
 pub use identity::{
     verify_bytes, verify_signed, verify_signed_batch, IdentityError, PartyIdentity,
 };
 pub use ledger::{SubLedger, SubLedgerEntry};
-pub use private::{open_private, seal_private, PrivateEnvelope, SealedShare};
+pub use private::{
+    open_private, recipients_from_keyrings, seal_private, seal_private_to, PrivateEnvelope,
+    Recipient, SealedShare,
+};
 pub use projection::{project_block, Projection};
 pub use view::{EncryptedView, ViewError, ViewKeyring};
 

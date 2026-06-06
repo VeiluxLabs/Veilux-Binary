@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use veilux_consensus::Vote;
 use veilux_kernel::{Block, SignedCommand};
-use veilux_veil::PrivateEnvelope;
+use veilux_veil::{PrivateEnvelope, RootAttestation};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "t", content = "d")]
@@ -15,6 +15,7 @@ pub enum NetMessage {
     Blocks { blocks: Vec<Block> },
     ViewChange(Box<ViewChange>),
     Private(Box<PrivateEnvelope>),
+    PrivateRoot(Box<RootAttestation>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -58,6 +59,7 @@ impl NetMessage {
             NetMessage::Blocks { .. } => "blocks",
             NetMessage::ViewChange(_) => "view_change",
             NetMessage::Private(_) => "private",
+            NetMessage::PrivateRoot(_) => "private_root",
         }
     }
 }

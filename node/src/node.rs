@@ -102,6 +102,7 @@ pub struct Node {
     pub state: StateTree,
     pub private_state: StateTree,
     pub private_commitments: Vec<Hash>,
+    pub attestations: veilux_veil::AttestationBook,
     pub blocks: Vec<Block>,
     pub mempool: Vec<Command>,
     pub keyrings: Vec<ViewKeyring>,
@@ -123,6 +124,7 @@ impl Node {
             state: StateTree::new(),
             private_state: StateTree::new(),
             private_commitments: Vec::new(),
+            attestations: veilux_veil::AttestationBook::default(),
             blocks: vec![genesis],
             mempool: Vec::new(),
             keyrings: Vec::new(),
@@ -582,6 +584,7 @@ impl Node {
             .cloned();
 
         let mut executed = false;
+        let mut attestation = None;
         if let Some(kr) = keyring {
             let inner = veilux_veil::open_private(envelope, &kr)?;
             if !self.cascade.has(&inner.prism) {
@@ -590,6 +593,15 @@ impl Node {
             let receipt = self.cascade.apply(inner, &mut self.private_state)?;
             let _ = receipt;
             executed = true;
+            let private_root = self.private_state.root();
+            let mut seed = [0u8; 32];
+            let s = kr.private_seed();
+            seed[..s.len().min(32)].copy_from_slice(&s[..s.len().min(32)]);
+            let identity = veilux_veil::PartyIdentity::from_seed(&kr.party().0, &seed);
+            let att =
+                veilux_veil::RootAttestation::create(&identity, envelope.commitment, private_root);
+            let _ = self.attestations.record(att.clone());
+            attestation = Some(att);
             if let Some(store) = &self.store {
                 store
                     .save_private_state(&self.private_state)
@@ -601,7 +613,19 @@ impl Node {
             commitment: envelope.commitment,
             executed,
             private_root: self.private_state.root(),
+            attestation,
         })
+    }
+
+    pub fn record_attestation(
+        &mut self,
+        attestation: veilux_veil::RootAttestation,
+    ) -> veilux_veil::AttestationOutcome {
+        self.attestations.record(attestation)
+    }
+
+    pub fn private_consistent(&self, commitment: &Hash) -> bool {
+        self.attestations.is_consistent(commitment)
     }
 
     fn sync_persisted_mempool(&self) -> Result<(), NodeError> {
@@ -638,6 +662,7 @@ pub struct PrivateOutcome {
     pub commitment: Hash,
     pub executed: bool,
     pub private_root: Hash,
+    pub attestation: Option<veilux_veil::RootAttestation>,
 }
 
 fn now() -> u64 {
@@ -1126,5 +1151,65 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stakeholders_attest_matching_private_roots() {
+        use veilux_veil::{seal_private, ViewKeyring};
+
+        let alice = ViewKeyring::from_passphrase(PartyId::new("alice"), "alice-pk");
+        let bob = ViewKeyring::from_passphrase(PartyId::new("bob"), "bob-pk");
+        let parties = vec![PartyId::new("alice"), PartyId::new("bob")];
+
+        let inner = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Parties(parties.clone()),
+            0,
+            "Secret",
+            "SEC",
+            0,
+            1_000,
+            true,
+        );
+        let envelope = seal_private(
+            &inner,
+            &parties,
+            &[alice.clone(), bob.clone()],
+            Hash::digest(b"attest-round"),
+        )
+        .unwrap();
+
+        let mut alice_node = node();
+        alice_node.host_party(alice);
+        let a_out = alice_node.apply_private_envelope(&envelope).unwrap();
+        let a_att = a_out.attestation.expect("alice attests");
+
+        let mut bob_node = node();
+        bob_node.host_party(bob);
+        let b_out = bob_node.apply_private_envelope(&envelope).unwrap();
+        let b_att = b_out.attestation.expect("bob attests");
+
+        assert_eq!(
+            a_att.private_root, b_att.private_root,
+            "two honest stakeholders executing the same confidential tx must reach the same private root"
+        );
+
+        assert_eq!(
+            alice_node.record_attestation(b_att),
+            veilux_veil::AttestationOutcome::Recorded,
+            "alice records bob's matching attestation without divergence"
+        );
+        assert!(alice_node.private_consistent(&envelope.commitment));
+
+        let evil = veilux_veil::RootAttestation::create(
+            &veilux_veil::PartyIdentity::from_seed("bob", &[9u8; 32]),
+            envelope.commitment,
+            Hash::digest(b"forged-divergent-root"),
+        );
+        let outcome = alice_node.record_attestation(evil);
+        assert!(
+            matches!(outcome, veilux_veil::AttestationOutcome::Divergence { .. }),
+            "a conflicting private root for an already-attested stakeholder must be flagged as divergence, got {outcome:?}"
+        );
     }
 }

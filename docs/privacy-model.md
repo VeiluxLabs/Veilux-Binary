@@ -139,15 +139,18 @@ prove a stakeholder node executes (private root changes, public root unchanged)
 while a non-stakeholder node records only the commitment (private root stays
 empty), and that a tampered envelope is rejected.
 
-> **Honest scope.** Today stakeholders converge their private state by each
-> executing the same decrypted command (deterministic Prisms guarantee identical
-> results). There is not yet a cross-stakeholder agreement *proof* on the private
-> root (a stakeholder could in principle diverge locally), nor are sealed shares
-> wrapped to X25519 recipient public keys (they use the per-party seed). Those
-> are the next hardening steps (§7). Envelope **distribution is done**: a
-> confidential transaction submitted to one validator is gossiped over the P2P
-> network (`NetMessage::Private`) so every stakeholder node receives and executes
-> it, verified live on a multi-validator network.
+> **Hardening status.** Sealed shares are now **X25519 key-wrapped**: each
+> envelope carries an ephemeral X25519 public key, and a recipient's share key is
+> derived from the ECDH of that ephemeral with the recipient's static X25519 key
+> (derived from its seed) — so opening a share requires the recipient's *secret
+> key*, not a shared seed (a wrong key for the right party name fails to decrypt).
+> Stakeholders also **sign a `(commitment, private_root)` attestation** after
+> executing; these are gossiped (`NetMessage::PrivateRoot`) so any divergence in
+> the confidential state between stakeholders is detected and flagged
+> (`AttestationOutcome::Divergence`). Verified live on a 3-validator network: both
+> stakeholders reached byte-identical private state and cross-attested without
+> divergence. Remaining: a *quorum/slashing* response to a flagged divergence
+> (today it is detected and logged, not yet penalized).
 
 #### Try it live
 
@@ -231,9 +234,10 @@ without ever exposing its signing key.
 The shipped Veil layer is a message/projection privacy model. These
 optional upgrades reduce trust assumptions and residual leakage:
 
-1. **Wrapped keys via X25519.** Replace passphrase-seeded view keys with
-   per-party key-agreement so grants wrap keys to a grantee's public key,
-   removing any shared-seed assumption.
+1. **Wrapped keys via X25519.** ✅ Shipped. Private-execution sealed shares use
+   an ephemeral-static X25519 ECDH per envelope, so a recipient needs its secret
+   key (not a shared seed) to open its share. (The passphrase-seeded *view* keys
+   for the projection model can adopt the same wrapping next.)
 2. **ZK proof of valid state transition.** Attach a succinct proof that an
    encrypted event corresponds to a valid Prism transition, so non-stakeholders
    verify *correctness* without seeing contents (the Prividium-style "trust the

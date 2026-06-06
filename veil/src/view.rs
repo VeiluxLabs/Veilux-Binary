@@ -112,6 +112,18 @@ impl ViewKeyring {
         crate::derive_view_key(&self.seed, view_id)
     }
 
+    pub fn x25519_secret(&self) -> x25519_dalek::StaticSecret {
+        let mut h = blake3::Hasher::new();
+        h.update(b"veilux/veil/x25519-static/v1");
+        h.update(&self.seed);
+        let bytes: [u8; 32] = *h.finalize().as_bytes();
+        x25519_dalek::StaticSecret::from(bytes)
+    }
+
+    pub fn x25519_public(&self) -> [u8; 32] {
+        x25519_dalek::PublicKey::from(&self.x25519_secret()).to_bytes()
+    }
+
     pub fn seal(&self, event: &Event) -> Result<EncryptedView, ViewError> {
         let key = self.key_for(&event.commitment());
         EncryptedView::seal(event, &self.party, &key)

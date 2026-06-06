@@ -244,6 +244,9 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
                             "confidential envelope applied; gossiping"
                         );
                         let _ = net.net.broadcast(&NetMessage::Private(Box::new(envelope)));
+                        if let Some(att) = out.attestation {
+                            let _ = net.net.broadcast(&NetMessage::PrivateRoot(Box::new(att)));
+                        }
                     }
                     Err(e) => debug!(error = %e, "rejected ingress private envelope"),
                 }
@@ -341,11 +344,31 @@ async fn handle_message(msg: NetMessage, net: &NetHandle, eng: &mut Engine) {
                 Ok(out) => {
                     if out.executed {
                         info!(commitment = %commitment, "confidential envelope executed (stakeholder)");
+                        if let Some(att) = out.attestation {
+                            let _ = net.net.broadcast(&NetMessage::PrivateRoot(Box::new(att)));
+                        }
                     } else {
                         debug!(commitment = %commitment, "confidential envelope recorded (non-stakeholder)");
                     }
                 }
                 Err(e) => debug!(error = %e, "rejected gossiped private envelope"),
+            }
+        }
+        NetMessage::PrivateRoot(att) => {
+            let commitment = att.commitment;
+            match eng.node.record_attestation(*att) {
+                veilux_veil::AttestationOutcome::Divergence { existing, incoming } => {
+                    warn!(
+                        commitment = %commitment,
+                        %existing,
+                        %incoming,
+                        "PRIVATE-ROOT DIVERGENCE: stakeholders disagree on confidential state"
+                    );
+                }
+                veilux_veil::AttestationOutcome::Recorded => {
+                    debug!(commitment = %commitment, "peer private-root attestation recorded (agrees)");
+                }
+                _ => {}
             }
         }
         NetMessage::Block(block) => {

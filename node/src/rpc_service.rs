@@ -194,11 +194,18 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
 
         method::PRIVATE_ROOT => {
             let n = node.lock().await;
+            let consistent = n
+                .private_commitments
+                .last()
+                .map(|c| n.private_consistent(c))
+                .unwrap_or(true);
             ok(
                 id,
                 serde_json::json!({
                     "private_root": n.private_root().to_hex(),
                     "private_tx_count": n.private_commitments.len(),
+                    "attestations": n.attestations.entries.len(),
+                    "consistent": consistent,
                 }),
             )
         }
