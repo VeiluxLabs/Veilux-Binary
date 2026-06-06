@@ -28,6 +28,29 @@ VEILUX is built around three ideas:
    featherweight · privacy-first · AI-native
 ```
 
+## Quickstart (60 seconds)
+
+```bash
+# build the single binary (Rust 1.85+)
+cargo build --release --bin veilux
+
+# 1. see the kernel + installed Prisms
+./target/release/veilux info
+
+# 2. run the end-to-end demo (private AI inference + token + NFT + contract + audit)
+./target/release/veilux demo
+
+# 3. start a dev node with JSON-RPC + WebSocket + an Ethereum-compatible endpoint
+./target/release/veilux serve --eth-rpc 127.0.0.1:8652
+
+# now point MetaMask at http://127.0.0.1:8652, or use the TypeScript SDK:
+#   npm install @veilux/sdk
+```
+
+That's a full, self-contained chain node — no external database, no extra
+services. For a real multi-validator BFT network see
+[`docs/consensus-networking.md`](docs/consensus-networking.md).
+
 ## Native token
 
 The native token's name, symbol, decimals, and total supply are **chosen at
@@ -133,7 +156,83 @@ default.**
    interpreter (deploy, call, `eth_call`, receipts, `eth_getCode`). See
    `docs/evm-compat.md`.
 
+### How VEILUX compares
+
+No chain wins on every axis. Here is an honest positioning against well-known
+designs — VEILUX's niche is **privacy + AI + a tiny modular core in one binary**,
+not raw throughput records.
+
+| | VEILUX | Ethereum L1 | Solana | Cosmos SDK chain | Canton/Fabric |
+|---|---|---|---|---|---|
+| Language / artifact | Rust, **one ~3 MB binary** | Go/Rust clients | Rust, large | Go, large | JVM/Go, heavy |
+| Smart contracts | **EVM bytecode** + native PhotonVM + Prisms | EVM | SVM (BPF) | CosmWasm/modules | DAML/chaincode |
+| Privacy | **Per-party encrypted sub-ledgers + private execution** (data stays on stakeholder nodes) | Public by default | Public by default | Public by default | Strong (per-party) |
+| AI | **First-class AI Prism** (verifiable inference, Ollama) | none | none | none | none |
+| Extending it | **Implement one trait, no fork** | hardforks/EIPs | core changes | modules | chaincode |
+| Consensus | Aurora stake-weighted BFT | Gasper PoS | PoH+PoS | Tendermint BFT | varies |
+| Wallet reach | **MetaMask/ethers via `eth_*`** | native | native | Keplr | n/a |
+| Maturity | **testnet-grade, unaudited externally** | battle-tested mainnet | mainnet | mainnet | enterprise prod |
+
+The honest takeaway: established chains are **production-proven**; VEILUX is a
+**young, original codebase** whose differentiators (Canton-style privacy that
+actually keeps data off the global ledger, AI as a native primitive, and a
+featherweight one-binary modular core) are unusual to find together. Choose it
+today for **research, private/permissioned deployments, and prototyping** those
+differentiators — not yet for securing large public value (see readiness below).
+
+### Production readiness (honest checklist)
+
+**Works today, verified by tests + live multi-node runs:**
+
+- ✅ Multi-node BFT finality, proposer failover, block sync, byte-identical state
+- ✅ Persistence (blocks + state + **restart-safe mempool**)
+- ✅ Authenticated **and end-to-end encrypted** validator transport (`--secure`)
+- ✅ Signature/nonce/key-binding/replay protection at the single ingress
+- ✅ EVM: deploy + call Solidity, inter-contract calls, CREATE/CREATE2, precompiles
+- ✅ Privacy: per-party views, **private execution**, divergence detection +
+  **on-chain slashing**
+- ✅ Economics: configurable token, fees (burn + reward), staking, governance, slashing
+- ✅ Rust + TypeScript SDKs, JSON-RPC, WebSocket, web explorer
+- ✅ Internal security audit with findings fixed (one critical caught & fixed —
+  see [`docs/audit-2026-06.md`](docs/audit-2026-06.md))
+
+**Required before securing real value (not done yet):**
+
+- 🔜 **Independent third-party security audit** (the single most important gap)
+- 🔜 Public testnet with real adversarial load and incentive testing
+- 🔜 Inter-contract EVM `CALL`/`CREATE` from within a running frame for complex
+  DeFi (single-frame contracts work today)
+- 🔜 HSM / keystore key management (keys are seed-derived in memory today)
+- 🔜 Fork-exact EVM gas schedule + missing precompiles (`ripemd160`, BN/BLS pairings)
+- 🔜 ZK-blind confidential transfers (amounts hidden but not yet zero-knowledge-proven)
+- 🔜 Light clients, formal spec, and large-scale fuzzing
+
+> **Bottom line:** the binary **runs and does what this README says** — you can
+> launch a network, deploy Solidity, move private value, and slash cheaters
+> right now. It is **not** yet hardened for a value-bearing public mainnet. Treat
+> it as a strong **testnet-grade core** pending an external audit.
+
 ### Who it's for
+
+Concrete things you can build on VEILUX today:
+
+- **Confidential institutional settlement.** Two banks settle a trade as a
+  `Parties([bankA, bankB])` private transaction: the amount and counterparties
+  live only on their own nodes, the public chain holds a tamper-evident
+  commitment, and a regulator can be handed a scoped disclosure grant — without
+  exposing anything to competitors.
+- **Verifiable on-chain AI.** Register a model and run deterministic inference
+  through the AI Prism (or a local LLM via Ollama); the result is committed and
+  auditable, with large outputs auto-offloaded to content-addressed storage.
+- **EVM dApps with privacy options.** Deploy a normal Solidity contract via
+  MetaMask, then move sensitive balances through the Confidential Token Prism or
+  private execution when you need them off the public ledger.
+- **Tokenized assets & private DAOs.** Issue a configurable native or custom
+  token, run stake-weighted governance, and keep membership/holdings private.
+- **Permissioned consortium chains.** Run `--secure` validators with an IP
+  allowlist and signed-peer handshake so only known members join the mesh.
+
+Primary audiences:
 
 - **Financial institutions** building confidential finance and tokenized assets
 - **Decentralized AI** applications needing verifiable on-chain inference
