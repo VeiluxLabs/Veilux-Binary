@@ -47,6 +47,7 @@ pub trait Host {
     fn chain_id(&self) -> u64;
 }
 
+#[derive(Debug)]
 pub struct ExecOutcome {
     pub success: bool,
     pub return_data: Vec<u8>,
@@ -738,5 +739,86 @@ mod tests {
             U256::from_u64(424242),
             "retrieve() returns the value stored by the previous call (real SLOAD/SSTORE + ABI selector dispatch)"
         );
+    }
+
+    #[test]
+    fn infinite_loop_halts_on_out_of_gas() {
+        let code = hex::decode("5b600056").unwrap();
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+        let ctx = CallContext {
+            caller: U256::ZERO,
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 1_000_000,
+        };
+        let result = Interpreter::new(&code, &ctx, &mut host).run();
+        assert!(
+            matches!(result, Err(VmError::OutOfGas)),
+            "an unconditional JUMP loop must terminate with OutOfGas, not hang: {result:?}"
+        );
+    }
+
+    #[test]
+    fn memory_bomb_is_bounded() {
+        let code = hex::decode("600163ffffffff52").unwrap();
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+        let ctx = CallContext {
+            caller: U256::ZERO,
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 100_000_000,
+        };
+        let result = Interpreter::new(&code, &ctx, &mut host).run();
+        assert!(
+            matches!(result, Err(VmError::MemoryLimit) | Err(VmError::OutOfGas)),
+            "a huge MSTORE offset must hit the memory cap, not allocate unbounded: {result:?}"
+        );
+    }
+
+    #[test]
+    fn jump_to_non_jumpdest_is_rejected() {
+        let code = hex::decode("600356005b").unwrap();
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+        let ctx = CallContext {
+            caller: U256::ZERO,
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 1_000_000,
+        };
+        let result = Interpreter::new(&code, &ctx, &mut host).run();
+        assert!(
+            matches!(result, Err(VmError::InvalidJump(_))),
+            "a JUMP into the middle of a PUSH must be rejected: {result:?}"
+        );
+    }
+
+    #[test]
+    fn stack_underflow_does_not_panic() {
+        let code = hex::decode("01").unwrap();
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+        let ctx = CallContext {
+            caller: U256::ZERO,
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 1_000_000,
+        };
+        let result = Interpreter::new(&code, &ctx, &mut host).run();
+        assert!(matches!(result, Err(VmError::StackUnderflow)));
     }
 }

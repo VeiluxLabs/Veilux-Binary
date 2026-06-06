@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-06
+
+### Added
+- **Wallet/indexer RPC completeness.** The `eth_*` shim gained
+  `eth_getTransactionByHash`, `eth_getBlockByHash`, and `eth_getLogs` (with an
+  optional `address` filter). Receipts now carry the **real `blockHash`** and the
+  actual emitted **logs** (previously empty/zero), and `eth_getBlockByNumber`
+  accepts `latest`/`earliest`/`pending` tags and any height. Each applied eth
+  transaction now seals a real anchor block, so `eth_blockNumber` advances and
+  blocks are addressable by their true hash — fixing a bug where the post-tx
+  `produce_block()` silently failed on the empty native mempool and the height
+  never moved.
+
+### Security
+- **EVM denial-of-service hardening (audit §2.14).** EVM gas is now **clamped to
+  30M** for deploys, calls, and `eth_call` regardless of the transaction's
+  declared `gas_limit`, so attacker bytecode with `gas_limit = u64::MAX` and an
+  infinite loop terminates with *out of gas* in milliseconds instead of hanging
+  the node (verified live: ~40 ms, node stays responsive). Returned contract code
+  is capped at 24,576 bytes (EIP-170).
+- **RLP integer-overflow panic fixed.** A crafted length prefix in a raw
+  transaction could make `start + len` overflow `usize` and panic — a remotely
+  reachable crash via `eth_sendRawTransaction`. All RLP length math now uses
+  `checked_add` and returns a decode error. Added adversarial/fuzz regression
+  tests (infinite loop, memory bomb, bad jumpdest, stack underflow, truncated and
+  random RLP, oversized code, replayed nonce, wrong chain id).
+
 ## [0.6.0] - 2026-06-06
 
 ### Added
@@ -407,7 +434,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.4.0...v0.5.0

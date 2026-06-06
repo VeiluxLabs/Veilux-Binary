@@ -74,10 +74,12 @@ A 4-byte-selector dispatched storage contract (the classic Solidity
 | `eth_getTransactionCount` | account nonce (for tx ordering) |
 | `eth_getCode` | deployed runtime bytecode at an address |
 | `eth_call` | read-only contract execution (no state change) |
+| `eth_getTransactionByHash` | full transaction details by hash |
+| `eth_getLogs` | event logs emitted by contracts (optional `address` filter) |
 | `eth_gasPrice`, `eth_estimateGas` | base price / fixed 21000 transfer cost |
 | `eth_sendRawTransaction` | submit a signed transfer, deploy, or contract call; returns the tx hash |
-| `eth_getTransactionReceipt` | poll for confirmation (`status`, `contractAddress`, `gasUsed`) |
-| `eth_getBlockByNumber` | head block summary |
+| `eth_getTransactionReceipt` | poll for confirmation (`status`, `contractAddress`, `gasUsed`, real `logs` + `blockHash`) |
+| `eth_getBlockByNumber`, `eth_getBlockByHash` | block by height/tag or by hash |
 | `web3_clientVersion`, `eth_syncing`, `net_listening` | wallet handshake |
 
 ## Limitations (honest scope)
@@ -102,4 +104,25 @@ wrong-chain signature recovers a different/zero address and fails). The reserved
 internal system-account guard (`/`). EVM execution runs against a trial copy of
 state and is only committed if the transaction succeeds; a revert rolls back all
 storage writes.
+
+### Denial-of-service hardening
+
+EVM bytecode is attacker-controlled, so the execution path is bounded against
+abuse (each item is regression-tested):
+
+- **Gas is capped at 30M regardless of the tx's declared `gas_limit`.** A
+  transaction claiming `gas_limit = u64::MAX` with an infinite loop
+  (`JUMPDEST; PUSH 0; JUMP`) is clamped and terminates with *out of gas* in
+  milliseconds instead of hanging the node (`infinite_loop_deploy_is_rejected_not_hung`).
+- **Contract code size is capped at 24,576 bytes** (EIP-170), so a deploy cannot
+  bloat state with arbitrarily large runtime code (`oversized_contract_code_is_rejected`).
+- **Memory is bounded** (1 MiB) and metered, so a huge `MSTORE` offset hits the
+  cap rather than allocating unbounded (`memory_bomb_is_bounded`).
+- **The RLP decoder is panic-free on arbitrary bytes.** Declared lengths are
+  checked with `checked_add` before slicing, so a crafted length prefix can never
+  trigger an integer-overflow panic or out-of-bounds slice; it returns a decode
+  error (`truncated_length_prefix_does_not_panic`, `fuzz_random_bytes_never_panic`,
+  `garbage_raw_tx_does_not_panic`).
+- **`eth_call` is also gas-capped**, so a read-only call cannot spin while holding
+  the node lock.
 

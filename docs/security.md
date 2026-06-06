@@ -77,23 +77,31 @@ check.
   `commitment_is_independent_of_recipient`,
   `projection::tests::party_only_sees_own_views`.
 
-### 2.7 P2P transport authentication
+### 2.7 P2P transport authentication & encryption
 - **Check:** On a real network each validator runs on its own server. Can a
   stranger who can reach a validator's port inject votes/blocks/commands or read
   gossip?
-- **Mitigation:** Optional authenticated transport (`veilux validator --secure`).
-  Every peer connection (inbound and outbound) must pass a **mutual Ed25519
-  signed handshake** before any `NetMessage` is accepted: each side signs the
-  other's fresh per-connection challenge (domain-separated with
-  `veilux/net-handshake/v1`), and a peer whose party is unknown or whose key does
-  not match the registered validator key is dropped. Inbound connections are
-  additionally screened by an optional **IP allowlist** (`--allow-ip`). Because
-  the challenge is random per connection, observing or replaying prior traffic
-  does not let an attacker complete a handshake.
-- **Tests:** `auth::tests::mutual_handshake_succeeds_between_known_validators`,
-  `unknown_peer_is_rejected`, `forged_key_for_known_party_is_rejected`,
-  `ip_allowlist_enforced_when_set`. Verified live: a secure 3-validator mesh
-  finalizes while an unlisted intruder is rejected at the handshake.
+- **Mitigation:** Optional authenticated, **end-to-end encrypted** transport
+  (`veilux validator --secure`). Every peer connection (inbound and outbound)
+  must pass a **mutual Ed25519 signed handshake** before any `NetMessage` is
+  accepted: each side signs the other's fresh per-connection challenge
+  (domain-separated with `veilux/net-handshake/v1`), and a peer whose party is
+  unknown or whose key does not match the registered validator key is dropped.
+  The same handshake carries a signed **X25519 ephemeral public key** (folded
+  into the signed proof, so a man-in-the-middle cannot substitute its own), from
+  which both sides derive per-direction **ChaCha20-Poly1305** keys (BLAKE3-XOF
+  KDF). After the handshake every gossip frame is sealed with a counter nonce; a
+  frame that fails to decrypt (tamper/reorder/replay) drops the peer. The
+  exchange is forward-secret — ephemeral keys are discarded on disconnect, so a
+  later identity-key compromise cannot decrypt captured past traffic. Inbound
+  connections are additionally screened by an optional **IP allowlist**
+  (`--allow-ip`).
+- **Tests:** `auth::tests::mutual_handshake_succeeds_between_known_validators`
+  (also asserts the encrypted frame round-trips), `unknown_peer_is_rejected`,
+  `forged_key_for_known_party_is_rejected`, `ip_allowlist_enforced_when_set`.
+  Verified live: a secure 4-validator mesh finalizes at byte-identical hashes
+  entirely over the encrypted channel while an unlisted intruder is rejected at
+  the handshake.
 
 ### 2.8 Consensus divergence via nondeterminism
 - **Check:** Could a Prism produce different output on different nodes (forking
@@ -156,6 +164,29 @@ check.
   means a lying proposer and the block is rejected).
 - **Test:** `node::tests::poison_command_does_not_stall_block_production`.
 
+### 2.14 EVM bytecode DoS & RLP panic (found & fixed)
+- **Check:** `eth_sendRawTransaction` accepts attacker-controlled bytecode and an
+  attacker-chosen `gas_limit`. Could a transaction hang the node (infinite loop),
+  exhaust memory, bloat state with huge code, or panic the RLP decoder?
+- **Fixes:**
+  - **Unbounded gas.** The EVM previously ran with the tx's declared gas
+    (`gas_limit.max(1_000_000)`), so `gas_limit = u64::MAX` plus a
+    `JUMPDEST;PUSH;JUMP` loop would spin while holding the node lock. Gas is now
+    **clamped to 30M** for deploys, calls, and `eth_call`, so a loop hits *out of
+    gas* in milliseconds. Verified live: the malicious deploy returns in ~40 ms
+    and the node stays responsive.
+  - **State bloat.** Returned contract code is capped at **24,576 bytes**
+    (EIP-170).
+  - **RLP integer-overflow panic.** A crafted length prefix could make
+    `start + len` overflow `usize` and panic (a remotely reachable crash). All
+    length math now uses `checked_add` and returns a decode error instead.
+- **Tests:** `vm::tests::infinite_loop_halts_on_out_of_gas`,
+  `memory_bomb_is_bounded`, `jump_to_non_jumpdest_is_rejected`,
+  `stack_underflow_does_not_panic`, `rlp::tests::truncated_length_prefix_does_not_panic`,
+  `fuzz_random_bytes_never_panic`, `eth::tests::infinite_loop_deploy_is_rejected_not_hung`,
+  `oversized_contract_code_is_rejected`, `garbage_raw_tx_does_not_panic`,
+  `replayed_nonce_rejected`, `wrong_chain_id_rejected`.
+
 ---
 
 ## 3. Residual risks / out of scope (current build)
@@ -165,20 +196,20 @@ These are **known limitations**, documented honestly rather than hidden:
 | Area | Status | Notes |
 |------|--------|-------|
 | Consensus | Aurora BFT (stake-weighted) | Prevote/precommit with 2/3+ finality, deterministic proposer rotation, quorum-synchronized view-change failover. Multi-view finality and live 4-node operation verified. |
-| Networking | TCP gossip + authenticated handshake | Featherweight transport for proposals/votes/blocks/commands with optional mutual signed handshake and IP allowlist (`--secure`). No transport encryption yet (payloads are signed/authenticated but sent in cleartext). |
-| Persistence | Append-only log + state snapshots | Blocks and state persist to disk and reload on restart. |
-| Transport confidentiality | None | The handshake authenticates peers but does not encrypt the channel; run validators over a private network/VPN/WireGuard or add TLS for confidentiality (roadmap). |
+| Networking | TCP gossip + authenticated, encrypted handshake | Featherweight transport for proposals/votes/blocks/commands with optional mutual signed handshake, IP allowlist, and X25519/ChaCha20-Poly1305 end-to-end encryption (`--secure`). |
+| Persistence | Append-only log + state snapshots + persistent mempool | Blocks, state, and pending transactions persist to disk and reload on restart. |
+| Transport confidentiality | Encrypted under `--secure` | The handshake authenticates peers and establishes a forward-secret ChaCha20-Poly1305 channel; the open dev transport (no `--secure`) stays cleartext for local inspection. |
 | View key exchange | Passphrase-seeded | Production needs X25519-wrapped keys (see privacy-model §7). |
 | Real AI execution | Simulated (deterministic) | Real models need verifiable compute (TEE/ZK). |
 | Metadata privacy | Partial | Sizes/timing observable to non-stakeholders. |
 | Key management | Seeds in memory | No HSM/keystore integration yet. |
 
 **Bottom line:** the node runs as a **multi-node, Byzantine-fault-tolerant,
-privacy-preserving chain** — consensus, authenticated networking, and
-persistence are in place and exercised by tests and live multi-node runs. The
-main remaining hardening items are transport-level confidentiality (encryption),
-production key management (HSM/keystore), and verifiable AI execution. Treat the
-current build as a solid testnet-grade core; complete the hardening checklist
+privacy-preserving chain** — consensus, authenticated **and encrypted**
+networking, and persistence (with a restart-safe mempool) are in place and
+exercised by tests and live multi-node runs. The main remaining hardening items
+are production key management (HSM/keystore) and verifiable AI execution. Treat
+the current build as a solid testnet-grade core; complete the hardening checklist
 before any value-bearing deployment.
 
 ---
@@ -195,9 +226,8 @@ before any value-bearing deployment.
       `submit_signed` and never bypass it.
 - [ ] Run validators with `--secure` and a curated `--peer`/`--allow-ip` set so
       only known validator keys (from allowlisted IPs) can join the gossip mesh.
-- [ ] Until transport encryption lands, run the validator mesh over a private
-      network or VPN (e.g. WireGuard) so authenticated payloads aren't observed
-      in cleartext.
+      `--secure` also encrypts the channel (X25519 + ChaCha20-Poly1305), so
+      authenticated payloads are no longer observable in cleartext.
 - [ ] For banking deployments, require scoped `DisclosureGrant`s with recorded
       justifications for every audit access.
 

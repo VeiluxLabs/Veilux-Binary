@@ -60,28 +60,32 @@ fn decode_item(input: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
         Ok((Rlp::Str(vec![first]), &input[1..]))
     } else if first <= 0xb7 {
         let len = (first - 0x80) as usize;
-        let body = input.get(1..1 + len).ok_or(RlpError::Eof)?;
-        Ok((Rlp::Str(body.to_vec()), &input[1 + len..]))
+        let end = 1usize.checked_add(len).ok_or(RlpError::Eof)?;
+        let body = input.get(1..end).ok_or(RlpError::Eof)?;
+        Ok((Rlp::Str(body.to_vec()), &input[end..]))
     } else if first <= 0xbf {
         let len_of_len = (first - 0xb7) as usize;
         let len_bytes = input.get(1..1 + len_of_len).ok_or(RlpError::Eof)?;
         let len = be_to_usize(len_bytes)?;
         let start = 1 + len_of_len;
-        let body = input.get(start..start + len).ok_or(RlpError::Eof)?;
-        Ok((Rlp::Str(body.to_vec()), &input[start + len..]))
+        let end = start.checked_add(len).ok_or(RlpError::Eof)?;
+        let body = input.get(start..end).ok_or(RlpError::Eof)?;
+        Ok((Rlp::Str(body.to_vec()), &input[end..]))
     } else if first <= 0xf7 {
         let len = (first - 0xc0) as usize;
-        let body = input.get(1..1 + len).ok_or(RlpError::Eof)?;
+        let end = 1usize.checked_add(len).ok_or(RlpError::Eof)?;
+        let body = input.get(1..end).ok_or(RlpError::Eof)?;
         let items = decode_list_body(body)?;
-        Ok((Rlp::List(items), &input[1 + len..]))
+        Ok((Rlp::List(items), &input[end..]))
     } else {
         let len_of_len = (first - 0xf7) as usize;
         let len_bytes = input.get(1..1 + len_of_len).ok_or(RlpError::Eof)?;
         let len = be_to_usize(len_bytes)?;
         let start = 1 + len_of_len;
-        let body = input.get(start..start + len).ok_or(RlpError::Eof)?;
+        let end = start.checked_add(len).ok_or(RlpError::Eof)?;
+        let body = input.get(start..end).ok_or(RlpError::Eof)?;
         let items = decode_list_body(body)?;
-        Ok((Rlp::List(items), &input[start + len..]))
+        Ok((Rlp::List(items), &input[end..]))
     }
 }
 
@@ -178,5 +182,36 @@ mod tests {
     fn as_u64_parses_be() {
         let r = Rlp::Str(vec![0x01, 0x00]);
         assert_eq!(r.as_u64().unwrap(), 256);
+    }
+
+    #[test]
+    fn truncated_length_prefix_does_not_panic() {
+        assert!(decode(&[0xb9, 0x01]).is_err());
+        assert!(decode(&[0xf8]).is_err());
+        assert!(decode(&[0xbf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]).is_err());
+    }
+
+    #[test]
+    fn declared_length_overrunning_buffer_is_eof() {
+        assert!(matches!(decode(&[0x85, b'a', b'b']), Err(RlpError::Eof)));
+        assert!(matches!(
+            decode(&[0xc5, 0x83, b'a']),
+            Err(RlpError::Eof) | Err(RlpError::Trailing)
+        ));
+    }
+
+    #[test]
+    fn fuzz_random_bytes_never_panic() {
+        let mut seed = 0x9e3779b97f4a7c15u64;
+        for _ in 0..5_000 {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let len = (seed % 48) as usize;
+            let bytes: Vec<u8> = (0..len)
+                .map(|i| ((seed >> (i % 8 * 8)) & 0xff) as u8)
+                .collect();
+            let _ = decode(&bytes);
+        }
     }
 }
