@@ -372,6 +372,15 @@ async fn handle_message(msg: NetMessage, net: &NetHandle, eng: &mut Engine) {
                         %incoming,
                         "PRIVATE-ROOT DIVERGENCE: stakeholders disagree on confidential state"
                     );
+                    let frauds = eng.node.private_quorum_fraud_proofs(&commitment);
+                    for proof in frauds {
+                        warn!(
+                            commitment = %commitment,
+                            offender = %proof.offender,
+                            "quorum arbitration: minority signer contradicts the majority root; submitting slash"
+                        );
+                        submit_quorum_slash(eng, net, proof).await;
+                    }
                 }
                 veilux_veil::AttestationOutcome::Recorded => {
                     debug!(commitment = %commitment, "peer private-root attestation recorded (agrees)");
@@ -504,6 +513,30 @@ async fn submit_private_slash(
         nonce,
         eng.height,
         &prism_staking::StakingCommand::Slash { proof },
+    );
+    let signed = eng.identity.sign_for_chain(cmd, eng.node.chain_id);
+    if eng.node.submit_signed(signed.clone()).is_ok() {
+        let _ = net.net.broadcast(&NetMessage::Command(Box::new(signed)));
+    }
+}
+
+async fn submit_quorum_slash(
+    eng: &mut Engine,
+    net: &NetHandle,
+    proof: prism_staking::QuorumFraudProof,
+) {
+    let nonce = eng
+        .node
+        .nonces
+        .get(eng.identity.party())
+        .map(|n| n + 1)
+        .unwrap_or(0);
+    let cmd = prism_staking::staking_command(
+        eng.me.clone(),
+        Visibility::Public,
+        nonce,
+        eng.height,
+        &prism_staking::StakingCommand::SlashQuorum { proof },
     );
     let signed = eng.identity.sign_for_chain(cmd, eng.node.chain_id);
     if eng.node.submit_signed(signed.clone()).is_ok() {

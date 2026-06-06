@@ -139,6 +139,44 @@ impl AttestationBook {
         }
         true
     }
+
+    pub fn canonical_root(&self, commitment: &Hash, stakeholder_count: usize) -> Option<Hash> {
+        let votes = self.agreement(commitment);
+        if votes.is_empty() {
+            return None;
+        }
+        let mut tally: Vec<(Hash, usize)> = Vec::new();
+        for v in &votes {
+            match tally.iter_mut().find(|(r, _)| *r == v.private_root) {
+                Some((_, c)) => *c += 1,
+                None => tally.push((v.private_root, 1)),
+            }
+        }
+        tally.sort_by(|a, b| b.1.cmp(&a.1));
+        let (top_root, top_count) = tally[0];
+        let threshold = stakeholder_count / 2 + 1;
+        if top_count >= threshold {
+            Some(top_root)
+        } else {
+            None
+        }
+    }
+
+    pub fn minority_offenders(
+        &self,
+        commitment: &Hash,
+        stakeholder_count: usize,
+    ) -> Vec<RootAttestation> {
+        match self.canonical_root(commitment, stakeholder_count) {
+            Some(canonical) => self
+                .entries
+                .iter()
+                .filter(|e| &e.commitment == commitment && e.private_root != canonical)
+                .cloned()
+                .collect(),
+            None => Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -211,5 +249,60 @@ mod tests {
             !book.is_consistent(&commitment),
             "two stakeholders reporting different private roots must be flagged inconsistent"
         );
+    }
+
+    #[test]
+    fn quorum_majority_decides_canonical_root_and_flags_minority() {
+        let alice = identity("alice");
+        let bob = identity("bob");
+        let carol = identity("carol");
+        let mallory = identity("mallory");
+        let commitment = Hash::digest(b"4-party-tx");
+        let honest = Hash::digest(b"honest-root");
+        let lie = Hash::digest(b"mallory-lie");
+
+        let mut book = AttestationBook::default();
+        book.record(RootAttestation::create(&alice, commitment, honest));
+        book.record(RootAttestation::create(&bob, commitment, honest));
+        book.record(RootAttestation::create(&carol, commitment, honest));
+        book.record(RootAttestation::create(&mallory, commitment, lie));
+
+        assert_eq!(
+            book.canonical_root(&commitment, 4),
+            Some(honest),
+            "3 of 4 stakeholders agree, so the honest root is canonical"
+        );
+
+        let offenders = book.minority_offenders(&commitment, 4);
+        assert_eq!(offenders.len(), 1, "exactly one minority liar");
+        assert_eq!(offenders[0].party, PartyId::new("mallory"));
+        assert!(
+            offenders[0].verify().is_ok(),
+            "the offender's own signed attestation is the proof of its lie"
+        );
+    }
+
+    #[test]
+    fn no_majority_means_no_canonical_root_and_no_offenders() {
+        let alice = identity("alice");
+        let bob = identity("bob");
+        let commitment = Hash::digest(b"split-tx");
+        let mut book = AttestationBook::default();
+        book.record(RootAttestation::create(
+            &alice,
+            commitment,
+            Hash::digest(b"root-A"),
+        ));
+        book.record(RootAttestation::create(
+            &bob,
+            commitment,
+            Hash::digest(b"root-B"),
+        ));
+        assert_eq!(
+            book.canonical_root(&commitment, 2),
+            None,
+            "a 1-1 split has no majority; arbitration cannot decide a liar"
+        );
+        assert!(book.minority_offenders(&commitment, 2).is_empty());
     }
 }

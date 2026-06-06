@@ -151,9 +151,17 @@ empty), and that a tampered envelope is rejected.
 > private roots for the same commitment** is now **slashed on-chain**: the node
 > turns the two signed attestations into a staking `EquivocationProof` and submits
 > a `staking.slash` (the same unforgeable double-sign mechanism used for consensus
-> equivocation), burning the offender's stake. Verified live on a 3-validator
-> network (honest case: both stakeholders agree, no false slash); the slash path
-> is covered end to end by `private_divergence_yields_a_valid_slash_proof`.
+> equivocation), burning the offender's stake. When **different** stakeholders
+> disagree, **quorum arbitration** decides: if a strict majority of the
+> stakeholder set signed one root, that root is canonical and every minority
+> signer is slashed via a `QuorumFraudProof` (`staking.slash_quorum`) carrying the
+> majority's signatures plus the offender's own contradicting signature — the liar
+> is identified by cryptographic majority, not by trusting any single node. A tie
+> with no majority is flagged but not auto-slashed (no provable liar). Verified
+> live on a 3-validator network (honest case: agreement, no false slash); both
+> slash paths are covered end to end by
+> `private_divergence_yields_a_valid_slash_proof` and
+> `quorum_minority_liar_is_slashed_end_to_end`.
 
 #### Try it live
 

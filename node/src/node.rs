@@ -102,6 +102,7 @@ pub struct Node {
     pub state: StateTree,
     pub private_state: StateTree,
     pub private_commitments: Vec<Hash>,
+    pub private_stakeholder_counts: std::collections::HashMap<Hash, usize>,
     pub attestations: veilux_veil::AttestationBook,
     pub blocks: Vec<Block>,
     pub mempool: Vec<Command>,
@@ -124,6 +125,7 @@ impl Node {
             state: StateTree::new(),
             private_state: StateTree::new(),
             private_commitments: Vec::new(),
+            private_stakeholder_counts: std::collections::HashMap::new(),
             attestations: veilux_veil::AttestationBook::default(),
             blocks: vec![genesis],
             mempool: Vec::new(),
@@ -571,6 +573,8 @@ impl Node {
         }
 
         self.private_commitments.push(envelope.commitment);
+        self.private_stakeholder_counts
+            .insert(envelope.commitment, envelope.stakeholders.len());
         if let Some(store) = &self.store {
             store
                 .save_private_commitments(&self.private_commitments)
@@ -637,6 +641,50 @@ impl Node {
             message_b: hex::encode(pair.b.signed_message()),
             signature_b: hex::encode(&pair.b.signature),
         })
+    }
+
+    pub fn private_quorum_fraud_proofs(
+        &self,
+        commitment: &Hash,
+    ) -> Vec<prism_staking::QuorumFraudProof> {
+        let count = match self.private_stakeholder_counts.get(commitment) {
+            Some(c) => *c,
+            None => return Vec::new(),
+        };
+        let canonical = match self.attestations.canonical_root(commitment, count) {
+            Some(r) => r,
+            None => return Vec::new(),
+        };
+        let all = self.attestations.agreement(commitment);
+        let majority: Vec<prism_staking::AttestationStatement> = all
+            .iter()
+            .filter(|e| e.private_root == canonical)
+            .map(|e| prism_staking::AttestationStatement {
+                party: e.party.clone(),
+                public_key: hex::encode(&e.public_key),
+                message: hex::encode(e.signed_message()),
+                signature: hex::encode(&e.signature),
+                root: e.private_root.to_hex(),
+            })
+            .collect();
+
+        self.attestations
+            .minority_offenders(commitment, count)
+            .into_iter()
+            .map(|o| prism_staking::QuorumFraudProof {
+                offender: o.party.clone(),
+                commitment: commitment.to_hex(),
+                stakeholder_count: count as u32,
+                offender_stmt: prism_staking::AttestationStatement {
+                    party: o.party.clone(),
+                    public_key: hex::encode(&o.public_key),
+                    message: hex::encode(o.signed_message()),
+                    signature: hex::encode(&o.signature),
+                    root: o.private_root.to_hex(),
+                },
+                majority: majority.clone(),
+            })
+            .collect()
     }
 
     pub fn private_consistent(&self, commitment: &Hash) -> bool {
@@ -1295,6 +1343,83 @@ mod tests {
         assert!(
             after < before,
             "a private-root divergence proof must actually slash the offender's stake: {before} -> {after}"
+        );
+    }
+
+    #[test]
+    fn quorum_minority_liar_is_slashed_end_to_end() {
+        use veilux_veil::{PartyIdentity, RootAttestation};
+
+        let commitment = Hash::digest(b"4-party-confidential");
+        let honest = Hash::digest(b"true-root");
+        let lie = Hash::digest(b"mallory-fabricated-root");
+
+        let mk = |name: &str| {
+            PartyIdentity::from_seed(name, &{
+                let mut s = [0u8; 32];
+                let b = name.as_bytes();
+                s[..b.len().min(32)].copy_from_slice(&b[..b.len().min(32)]);
+                s
+            })
+        };
+
+        let mut n = node();
+        n.private_stakeholder_counts.insert(commitment, 4);
+        for who in ["alice", "bob", "carol"] {
+            assert_eq!(
+                n.record_attestation(RootAttestation::create(&mk(who), commitment, honest)),
+                veilux_veil::AttestationOutcome::Recorded
+            );
+        }
+        let _ = n.record_attestation(RootAttestation::create(&mk("mallory"), commitment, lie));
+
+        let proofs = n.private_quorum_fraud_proofs(&commitment);
+        assert_eq!(proofs.len(), 1, "exactly one minority liar (mallory)");
+        let proof = proofs.into_iter().next().unwrap();
+        assert_eq!(proof.offender, PartyId::new("mallory"));
+        assert_eq!(proof.majority.len(), 3);
+
+        let mut staking_node = {
+            let mut cascade = Cascade::new();
+            cascade.install(Box::new(prism_token::TokenPrism::new()));
+            cascade.install(Box::new(prism_staking::StakingPrism::new()));
+            Node::new(PartyId::new("v0"), cascade)
+        };
+        let _ = prism_token::seed_native_token(
+            &mut staking_node.state,
+            "Veilux",
+            "LUX",
+            0,
+            &PartyId::new("treasury"),
+            &[(PartyId::new("mallory"), 10_000)],
+        );
+        let stake = prism_staking::staking_command(
+            PartyId::new("mallory"),
+            Visibility::Public,
+            0,
+            1,
+            &prism_staking::StakingCommand::Stake { amount: 2_000 },
+        );
+        let mallory_id = mk("mallory");
+        staking_node.submit_signed(mallory_id.sign(stake)).unwrap();
+        staking_node.produce_block().unwrap();
+        let before = prism_staking::voting_power_of(&staking_node.state, &PartyId::new("mallory"));
+
+        let slash = prism_staking::staking_command(
+            PartyId::new("watchdog"),
+            Visibility::Public,
+            0,
+            2,
+            &prism_staking::StakingCommand::SlashQuorum { proof },
+        );
+        let watchdog = PartyIdentity::from_seed("watchdog", &[7u8; 32]);
+        staking_node.submit_signed(watchdog.sign(slash)).unwrap();
+        staking_node.produce_block().unwrap();
+        let after = prism_staking::voting_power_of(&staking_node.state, &PartyId::new("mallory"));
+
+        assert!(
+            after < before,
+            "a quorum-fraud proof must slash the minority liar's stake: {before} -> {after}"
         );
     }
 }

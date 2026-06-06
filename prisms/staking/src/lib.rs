@@ -97,6 +97,24 @@ pub struct EquivocationProof {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AttestationStatement {
+    pub party: PartyId,
+    pub public_key: String,
+    pub message: String,
+    pub signature: String,
+    pub root: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuorumFraudProof {
+    pub offender: PartyId,
+    pub commitment: String,
+    pub stakeholder_count: u32,
+    pub offender_stmt: AttestationStatement,
+    pub majority: Vec<AttestationStatement>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum StakingCommand {
     Stake {
@@ -131,6 +149,9 @@ pub enum StakingCommand {
     },
     Slash {
         proof: EquivocationProof,
+    },
+    SlashQuorum {
+        proof: QuorumFraudProof,
     },
     FundRewards {
         #[serde(with = "u128_dec")]
@@ -639,6 +660,107 @@ impl Prism for StakingPrism {
                 let offence = Hash::commit(
                     "staking/equivocation",
                     &[proof.offender.0.as_bytes(), lo, hi],
+                );
+                if state.contains(&Self::slash_key(&offence)) {
+                    return Err(PrismError::InvalidPayload("offence already slashed".into()));
+                }
+
+                let mut rec = Self::stake_of(state, &proof.offender);
+                let burned = rec.self_bonded * (DEFAULT_SLASH_BPS as u128) / 10_000;
+                if burned > 0 {
+                    burn_from(state, &native_token_id(), &escrow_account(), burned)
+                        .map_err(|_| PrismError::Internal("slash burn failed".into()))?;
+                    rec.self_bonded -= burned;
+                    Self::save_stake(state, &rec)?;
+                    Self::update_lock(state, &proof.offender, -(burned as i128))?;
+                }
+                state
+                    .put_json(Self::slash_key(&offence), &true)
+                    .map_err(|e| PrismError::Internal(e.to_string()))?;
+
+                Ok(PrismOutput::single(
+                    Self::event(
+                        command,
+                        StakingEvent::Slashed {
+                            offender: proof.offender,
+                            burned,
+                            remaining_self: rec.self_bonded,
+                        },
+                    ),
+                    7_000,
+                ))
+            }
+
+            StakingCommand::SlashQuorum { proof } => {
+                let verify_stmt = |s: &AttestationStatement| -> Result<Vec<u8>, PrismError> {
+                    let pk = hex::decode(s.public_key.trim_start_matches("0x"))
+                        .map_err(|_| PrismError::InvalidPayload("bad public key hex".into()))?;
+                    let msg = hex::decode(s.message.trim_start_matches("0x"))
+                        .map_err(|_| PrismError::InvalidPayload("bad message hex".into()))?;
+                    let sig = hex::decode(s.signature.trim_start_matches("0x"))
+                        .map_err(|_| PrismError::InvalidPayload("bad signature hex".into()))?;
+                    verify_bytes(&pk, &msg, &sig).map_err(|_| {
+                        PrismError::Unauthorized("attestation signature invalid".into())
+                    })?;
+                    Ok(msg)
+                };
+
+                verify_stmt(&proof.offender_stmt)?;
+                if proof.offender_stmt.party != proof.offender {
+                    return Err(PrismError::InvalidPayload(
+                        "offender statement party mismatch".into(),
+                    ));
+                }
+
+                let mut seen: Vec<PartyId> = Vec::new();
+                let mut canonical: Option<String> = None;
+                for s in &proof.majority {
+                    verify_stmt(s)?;
+                    if seen.contains(&s.party) {
+                        return Err(PrismError::InvalidPayload(
+                            "duplicate party in majority set".into(),
+                        ));
+                    }
+                    if s.party == proof.offender {
+                        return Err(PrismError::InvalidPayload(
+                            "offender cannot be in the majority set".into(),
+                        ));
+                    }
+                    seen.push(s.party.clone());
+                    match &canonical {
+                        None => canonical = Some(s.root.clone()),
+                        Some(r) if r != &s.root => {
+                            return Err(PrismError::InvalidPayload(
+                                "majority set does not agree on one root".into(),
+                            ))
+                        }
+                        _ => {}
+                    }
+                }
+
+                let canonical = canonical
+                    .ok_or_else(|| PrismError::InvalidPayload("empty majority set".into()))?;
+                if proof.offender_stmt.root == canonical {
+                    return Err(PrismError::InvalidPayload(
+                        "offender agrees with the canonical root — nothing to slash".into(),
+                    ));
+                }
+
+                let count = proof.stakeholder_count as usize;
+                let threshold = count / 2 + 1;
+                if proof.majority.len() < threshold {
+                    return Err(PrismError::InvalidPayload(
+                        "majority set does not meet the quorum threshold".into(),
+                    ));
+                }
+
+                let offence = Hash::commit(
+                    "staking/quorum-fraud",
+                    &[
+                        proof.offender.0.as_bytes(),
+                        proof.commitment.as_bytes(),
+                        proof.offender_stmt.root.as_bytes(),
+                    ],
                 );
                 if state.contains(&Self::slash_key(&offence)) {
                     return Err(PrismError::InvalidPayload("offence already slashed".into()));

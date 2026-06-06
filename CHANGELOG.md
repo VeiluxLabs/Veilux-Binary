@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-06-06
+
+### Added
+- **Quorum arbitration for confidential-state divergence.** When *different*
+  stakeholders of a confidential transaction report conflicting private roots,
+  the node now resolves it by majority: `AttestationBook::canonical_root` picks
+  the root signed by a strict majority of the stakeholder set, and every minority
+  signer is slashed via a new `QuorumFraudProof` / `staking.slash_quorum` command.
+  The proof carries the majority's signed attestations plus the offender's own
+  contradicting signed attestation, so the staking prism verifies every signature,
+  confirms the majority meets the quorum threshold, and burns the minority liar's
+  stake — the offender is identified by unforgeable cryptographic majority, not by
+  trusting any single node. A tie with no majority is flagged but never
+  auto-slashed (no provable liar). End-to-end test
+  `quorum_minority_liar_is_slashed_end_to_end` (4 stakeholders, 3 honest + 1 liar)
+  confirms the liar's stake is actually reduced; `quorum_majority_decides_canonical_root_and_flags_minority`
+  and `no_majority_means_no_canonical_root_and_no_offenders` cover the arbitration
+  logic. This closes the last open item from the privacy-hardening roadmap.
+
 ## [0.7.1] - 2026-06-06
 
 ### Added
@@ -569,7 +588,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.5...v0.7.0
 [0.6.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.4...v0.6.5
