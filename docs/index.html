@@ -3,121 +3,169 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>VEILUX — privacy-first, AI-native Layer-1 in Rust</title>
+<title>VEILUX — the privacy-first, AI-native Layer-1 in Rust</title>
 <meta name="description" content="VEILUX is a featherweight, privacy-first, AI-native Layer-1 blockchain written in Rust. Deploy Solidity, move private value between parties, run on-chain AI — from a single binary." />
 <meta property="og:title" content="VEILUX — privacy-first, AI-native Layer-1 in Rust" />
 <meta property="og:description" content="Deploy Solidity, move private value between parties, run on-chain AI — from a single self-contained binary. Testnet-grade, open source." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://veiluxlabs.github.io/Veilux-Binary/" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpolygon points='32,4 58,32 32,60 6,32' fill='none' stroke='%2338e1c4' stroke-width='4'/%3E%3Cpolygon points='32,18 46,32 32,46 18,32' fill='%2338e1c4'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2356f0d0'/%3E%3Cstop offset='1' stop-color='%237c6cff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpolygon points='32,4 58,32 32,60 6,32' fill='none' stroke='url(%23g)' stroke-width='4'/%3E%3Cpolygon points='32,18 46,32 32,46 18,32' fill='url(%23g)'/%3E%3C/svg%3E" />
 <style>
   :root{
-    --bg:#0a0e14; --bg2:#0e131c; --panel:#121823; --panel2:#161d2b;
-    --line:#1f2937; --txt:#e6edf3; --muted:#9aa7b8; --dim:#6b7889;
-    --teal:#38e1c4; --teal2:#2bbfa6; --violet:#8b7cf6; --amber:#f5b54a;
+    --bg:#070a10; --bg-soft:#0b0f17; --panel:rgba(255,255,255,.025); --panel-brd:rgba(255,255,255,.08);
+    --txt:#eef2f7; --muted:#a3b1c2; --dim:#677488;
+    --teal:#56f0d0; --green:#3ddc97; --violet:#7c6cff; --blue:#4d9fff; --amber:#ffc15e;
+    --radius:18px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
+  html{scroll-behavior:smooth; -webkit-text-size-adjust:100%}
   body{
     background:var(--bg); color:var(--txt);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-    line-height:1.6; -webkit-font-smoothing:antialiased;
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    line-height:1.65; -webkit-font-smoothing:antialiased; overflow-x:hidden;
   }
+  /* animated gradient mesh + grid */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
+    background:
+      radial-gradient(680px 540px at 12% -8%, rgba(124,108,255,.22), transparent 60%),
+      radial-gradient(720px 560px at 88% 0%, rgba(86,240,208,.18), transparent 58%),
+      radial-gradient(900px 700px at 50% 115%, rgba(77,159,255,.12), transparent 60%);
+    animation:drift 18s ease-in-out infinite alternate;
+  }
+  body::after{
+    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
+    background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+    background-size:54px 54px;
+    mask-image:radial-gradient(circle at 50% 30%, #000 0%, transparent 78%);
+    -webkit-mask-image:radial-gradient(circle at 50% 30%, #000 0%, transparent 78%);
+  }
+  @keyframes drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-26px,0)}}
   a{color:var(--teal); text-decoration:none}
-  a:hover{text-decoration:underline}
-  .wrap{max-width:1040px; margin:0 auto; padding:0 24px}
-  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.92em}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+  .gradtext{background:linear-gradient(110deg,var(--teal),var(--violet) 70%);
+            -webkit-background-clip:text; background-clip:text; color:transparent}
 
   /* nav */
-  nav{position:sticky; top:0; z-index:50; backdrop-filter:blur(10px);
-      background:rgba(10,14,20,.82); border-bottom:1px solid var(--line)}
-  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:60px}
-  .brand{display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.5px}
-  .brand svg{width:26px; height:26px}
-  .navlinks{display:flex; gap:22px; font-size:14px}
-  .navlinks a{color:var(--muted)}
-  .navlinks a:hover{color:var(--txt); text-decoration:none}
-  @media(max-width:640px){.navlinks{display:none}}
+  nav{position:sticky; top:0; z-index:60; backdrop-filter:saturate(160%) blur(14px);
+      background:rgba(7,10,16,.72); border-bottom:1px solid var(--panel-brd)}
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:64px}
+  .brand{display:flex; align-items:center; gap:11px; font-weight:800; letter-spacing:.4px; font-size:17px}
+  .brand svg{width:28px; height:28px}
+  .navlinks{display:flex; gap:28px; font-size:14.5px; font-weight:500}
+  .navlinks a{color:var(--muted); transition:color .15s}
+  .navlinks a:hover{color:var(--txt)}
+  .nav-cta{padding:8px 16px; border-radius:10px; background:var(--txt); color:#070a10 !important; font-weight:700; font-size:13.5px}
+  @media(max-width:720px){.navlinks a:not(.nav-cta){display:none}}
 
   /* hero */
-  .hero{position:relative; overflow:hidden; padding:88px 0 72px; text-align:center;
-        background:
-          radial-gradient(900px 420px at 50% -10%, rgba(56,225,196,.16), transparent 60%),
-          radial-gradient(700px 380px at 85% 10%, rgba(139,124,246,.12), transparent 60%)}
-  .logomark{width:84px; height:84px; margin:0 auto 22px; display:block;
-            filter:drop-shadow(0 0 24px rgba(56,225,196,.45))}
-  .hero h1{font-size:clamp(34px,6vw,58px); line-height:1.05; font-weight:800; letter-spacing:-1px}
-  .hero h1 .grad{background:linear-gradient(120deg,var(--teal),var(--violet));
-                 -webkit-background-clip:text; background-clip:text; color:transparent}
-  .hero p.lead{margin:18px auto 0; max-width:680px; font-size:19px; color:var(--muted)}
-  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:22px}
-  .badge{font-size:12px; padding:5px 11px; border:1px solid var(--line); border-radius:999px;
-         color:var(--muted); background:var(--panel)}
-  .cta{display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:34px}
-  .btn{display:inline-flex; align-items:center; gap:8px; padding:13px 24px; border-radius:11px;
-       font-weight:600; font-size:15px; transition:transform .12s ease, box-shadow .12s ease}
-  .btn:hover{text-decoration:none; transform:translateY(-2px)}
-  .btn-primary{background:linear-gradient(120deg,var(--teal),var(--teal2)); color:#04120e;
-               box-shadow:0 8px 28px rgba(56,225,196,.32)}
-  .btn-ghost{background:var(--panel); color:var(--txt); border:1px solid var(--line)}
+  .hero{position:relative; text-align:center; padding:96px 0 80px}
+  .pill{display:inline-flex; align-items:center; gap:9px; font-size:13px; font-weight:600;
+        padding:7px 15px; border:1px solid var(--panel-brd); border-radius:999px;
+        background:var(--panel); color:var(--muted); margin-bottom:30px}
+  .pill .ping{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(61,220,151,.6); animation:ping 2s infinite}
+  @keyframes ping{0%{box-shadow:0 0 0 0 rgba(61,220,151,.55)}70%{box-shadow:0 0 0 9px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
+  .hero h1{font-size:clamp(40px,6.6vw,72px); line-height:1.03; font-weight:900; letter-spacing:-2.2px}
+  .hero p.lead{margin:24px auto 0; max-width:660px; font-size:clamp(17px,2.2vw,20px); color:var(--muted); font-weight:400}
+  .cta{display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:38px}
+  .btn{display:inline-flex; align-items:center; gap:9px; padding:14px 26px; border-radius:13px;
+       font-weight:700; font-size:15px; transition:transform .14s ease, box-shadow .14s ease, opacity .14s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{background:linear-gradient(110deg,var(--teal),var(--green)); color:#04130e;
+               box-shadow:0 10px 34px rgba(86,240,208,.34)}
+  .btn-primary:hover{box-shadow:0 14px 42px rgba(86,240,208,.46)}
+  .btn-ghost{background:var(--panel); color:var(--txt); border:1px solid var(--panel-brd)}
+  .btn-ghost:hover{border-color:rgba(255,255,255,.22)}
+  .heronums{display:flex; gap:40px; justify-content:center; flex-wrap:wrap; margin-top:56px}
+  .heronums .n{font-size:30px; font-weight:800; letter-spacing:-1px}
+  .heronums .l{font-size:13px; color:var(--dim); font-weight:500; text-transform:uppercase; letter-spacing:1px}
 
-  section{padding:64px 0; border-top:1px solid var(--line)}
-  .eyebrow{color:var(--teal); font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase}
-  h2{font-size:clamp(24px,3.4vw,32px); font-weight:800; margin:8px 0 6px; letter-spacing:-.5px}
-  .sub{color:var(--muted); max-width:680px; margin-bottom:34px}
+  section{padding:78px 0; position:relative}
+  .center{text-align:center}
+  .eyebrow{color:var(--teal); font-size:12.5px; font-weight:700; letter-spacing:2px; text-transform:uppercase}
+  h2{font-size:clamp(28px,4vw,40px); font-weight:800; margin:12px 0 8px; letter-spacing:-1px}
+  .sub{color:var(--muted); max-width:600px; margin:0 auto 44px; font-size:16.5px}
 
+  /* feature cards w/ gradient border */
   .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
-  @media(max-width:860px){.grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:880px){.grid{grid-template-columns:1fr 1fr}}
   @media(max-width:560px){.grid{grid-template-columns:1fr}}
-  .card{background:linear-gradient(180deg,var(--panel),var(--bg2));
-        border:1px solid var(--line); border-radius:16px; padding:24px; transition:border-color .15s, transform .15s}
-  .card:hover{border-color:var(--teal2); transform:translateY(-3px)}
-  .card .ico{width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center;
-             background:rgba(56,225,196,.12); margin-bottom:14px; font-size:20px}
-  .card h3{font-size:17px; margin-bottom:6px}
+  .card{position:relative; border-radius:var(--radius); padding:1px;
+        background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.02));
+        transition:transform .18s ease}
+  .card:hover{transform:translateY(-4px)}
+  .card .inner{height:100%; border-radius:calc(var(--radius) - 1px); padding:26px;
+               background:linear-gradient(180deg,#0d121c,#0a0e16)}
+  .card:hover .inner{background:linear-gradient(180deg,#0f1623,#0b1018)}
+  .card .ico{width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center;
+             font-size:22px; margin-bottom:16px;
+             background:linear-gradient(135deg,rgba(86,240,208,.18),rgba(124,108,255,.18));
+             border:1px solid rgba(255,255,255,.08)}
+  .card h3{font-size:17.5px; font-weight:700; margin-bottom:7px; letter-spacing:-.3px}
   .card p{color:var(--muted); font-size:14.5px}
+  code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace; font-size:.9em;
+       background:rgba(255,255,255,.06); padding:1px 6px; border-radius:6px}
 
   /* terminal */
-  .term{background:#070a0f; border:1px solid var(--line); border-radius:14px; overflow:hidden;
-        box-shadow:0 20px 60px rgba(0,0,0,.45)}
-  .term .bar{display:flex; gap:7px; padding:13px 16px; border-bottom:1px solid var(--line); background:var(--panel)}
+  .termwrap{position:relative; max-width:860px; margin:0 auto}
+  .termwrap::before{content:""; position:absolute; inset:-30px; z-index:-1;
+    background:radial-gradient(60% 60% at 50% 40%, rgba(124,108,255,.28), transparent 70%); filter:blur(20px)}
+  .term{border-radius:16px; overflow:hidden; border:1px solid var(--panel-brd);
+        box-shadow:0 30px 80px rgba(0,0,0,.55); background:#06090e}
+  .term .bar{display:flex; align-items:center; gap:8px; padding:14px 16px; border-bottom:1px solid var(--panel-brd); background:#0b0f17}
   .term .bar i{width:12px; height:12px; border-radius:50%}
-  .dot-r{background:#ff5f56}.dot-y{background:#ffbd2e}.dot-g{background:#27c93f}
-  .term pre{margin:0; padding:20px 22px; overflow-x:auto; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
-            font-size:13.5px; line-height:1.75; color:#cbd5e1}
-  .term .c1{color:var(--teal)} .term .c2{color:var(--violet)} .term .cm{color:var(--dim)} .term .ok{color:#48d597}
+  .dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+  .term .bar .t{margin-left:10px; color:var(--dim); font-size:12.5px; font-family:'JetBrains Mono',monospace}
+  .term pre{margin:0; padding:22px 24px; overflow-x:auto; font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;
+            font-size:13.5px; line-height:1.85; color:#c4d0de}
+  .term pre code{background:none; padding:0; font-size:inherit}
+  .c1{color:var(--teal)} .c2{color:var(--violet)} .cm{color:var(--dim)} .ok{color:var(--green)} .c3{color:var(--blue)}
 
   /* table */
-  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:14px}
+  .tablewrap{max-width:880px; margin:0 auto; overflow-x:auto; border:1px solid var(--panel-brd); border-radius:16px; background:var(--panel)}
   table{width:100%; border-collapse:collapse; font-size:14.5px; min-width:560px}
-  th,td{text-align:left; padding:14px 16px; border-bottom:1px solid var(--line)}
-  th{color:var(--muted); font-weight:600; background:var(--panel)}
+  th,td{text-align:left; padding:15px 18px; border-bottom:1px solid var(--panel-brd)}
+  th{color:var(--muted); font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:.5px; background:rgba(255,255,255,.03)}
+  th:first-child{border-top-left-radius:16px} th:last-child{border-top-right-radius:16px}
   tr:last-child td{border-bottom:none}
-  td:first-child{font-weight:600}
-  .yes{color:var(--teal)} .no{color:var(--dim)}
+  td:first-child{font-weight:600; color:var(--txt)}
+  .veilcol{color:var(--teal); font-weight:700}
+  .yes{color:var(--green)} .no{color:var(--dim)} .mid{color:var(--amber)}
 
-  /* docs list */
-  .docs{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
-  @media(max-width:640px){.docs{grid-template-columns:1fr}}
-  .doc{display:flex; gap:14px; padding:16px 18px; border:1px solid var(--line); border-radius:12px;
-       background:var(--panel); align-items:center; transition:border-color .15s, background .15s}
-  .doc:hover{border-color:var(--teal2); background:var(--panel2); text-decoration:none}
-  .doc .e{font-size:20px} .doc b{color:var(--txt); display:block; font-size:15px}
-  .doc span{color:var(--muted); font-size:13px}
+  /* docs */
+  .docs{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; max-width:980px; margin:0 auto}
+  @media(max-width:820px){.docs{grid-template-columns:1fr 1fr}}
+  @media(max-width:520px){.docs{grid-template-columns:1fr}}
+  .doc{display:flex; gap:14px; padding:18px; border:1px solid var(--panel-brd); border-radius:14px;
+       background:var(--panel); align-items:center; transition:all .15s}
+  .doc:hover{border-color:rgba(86,240,208,.5); background:rgba(86,240,208,.05); transform:translateY(-2px)}
+  .doc .e{font-size:22px} .doc b{color:var(--txt); display:block; font-size:14.5px; font-weight:600}
+  .doc small{color:var(--dim); font-size:12.5px}
 
-  .note{background:rgba(245,181,74,.08); border:1px solid rgba(245,181,74,.3); border-left:3px solid var(--amber);
-        border-radius:10px; padding:16px 18px; color:#e9d9b8; font-size:14.5px}
+  .note{max-width:880px; margin:46px auto 0; background:rgba(255,193,94,.07);
+        border:1px solid rgba(255,193,94,.28); border-radius:14px; padding:20px 22px; color:#f0e0c2; font-size:14.5px}
   .note b{color:var(--amber)}
 
-  footer{border-top:1px solid var(--line); padding:36px 0; color:var(--dim); font-size:13.5px}
-  footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:14px; align-items:center}
+  /* final cta */
+  .finalcta{max-width:880px; margin:0 auto; text-align:center; padding:56px 32px; border-radius:24px;
+    border:1px solid var(--panel-brd);
+    background:radial-gradient(120% 140% at 50% 0%, rgba(124,108,255,.18), transparent 60%), #0a0e16}
+  .finalcta h2{margin-bottom:10px}
+
+  footer{border-top:1px solid var(--panel-brd); padding:40px 0; color:var(--dim); font-size:13.5px}
+  footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; align-items:center}
+  footer a{color:var(--muted)}
 </style>
 </head>
 <body>
 
 <nav><div class="wrap">
   <div class="brand">
-    <svg viewBox="0 0 64 64"><polygon points="32,4 58,32 32,60 6,32" fill="none" stroke="#38e1c4" stroke-width="4"/><polygon points="32,18 46,32 32,46 18,32" fill="#38e1c4"/></svg>
+    <svg viewBox="0 0 64 64"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#56f0d0"/><stop offset="1" stop-color="#7c6cff"/></linearGradient></defs><polygon points="32,4 58,32 32,60 6,32" fill="none" stroke="url(#bg)" stroke-width="4"/><polygon points="32,18 46,32 32,46 18,32" fill="url(#bg)"/></svg>
     VEILUX
   </div>
   <div class="navlinks">
@@ -125,119 +173,134 @@
     <a href="#quickstart">Quickstart</a>
     <a href="#compare">Compare</a>
     <a href="#docs">Docs</a>
-    <a href="https://github.com/VeiluxLabs/Veilux-Binary">GitHub</a>
+    <a class="nav-cta" href="https://github.com/VeiluxLabs/Veilux-Binary">GitHub ↗</a>
   </div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <svg class="logomark" viewBox="0 0 64 64">
-    <polygon points="32,3 60,32 32,61 4,32" fill="none" stroke="#38e1c4" stroke-width="2.5"/>
-    <polygon points="32,15 49,32 32,49 15,32" fill="none" stroke="#8b7cf6" stroke-width="2"/>
-    <polygon points="32,24 40,32 32,40 24,32" fill="#38e1c4"/>
-  </svg>
-  <h1>The privacy-first,<br><span class="grad">AI-native</span> Layer-1 in Rust</h1>
+  <span class="pill"><span class="ping"></span> Open source · v0.7.6 · Rust workspace</span>
+  <h1>The <span class="gradtext">privacy-first,<br>AI-native</span> Layer-1<br>blockchain in Rust</h1>
   <p class="lead">Launch a network, deploy Solidity, move private value between named parties,
-  and run verifiable on-chain AI — from a single self-contained binary.</p>
-  <div class="badges">
-    <span class="badge">⚙️ Pure Rust</span>
-    <span class="badge">🔐 Per-party privacy</span>
-    <span class="badge">⟠ EVM-compatible</span>
-    <span class="badge">🧠 On-chain AI</span>
-    <span class="badge">⚖️ BFT + slashing</span>
-  </div>
+  and run verifiable on-chain AI — all from a single self-contained binary.</p>
   <div class="cta">
-    <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary">★ View on GitHub</a>
+    <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary">★ Star on GitHub</a>
     <a class="btn btn-ghost" href="https://github.com/VeiluxLabs/Veilux-Binary/releases">⤓ Download binary</a>
+  </div>
+  <div class="heronums">
+    <div><div class="n gradtext">9</div><div class="l">Prisms</div></div>
+    <div><div class="n gradtext">EVM</div><div class="l">Solidity-ready</div></div>
+    <div><div class="n gradtext">BFT</div><div class="l">+ slashing</div></div>
+    <div><div class="n gradtext">0</div><div class="l">runtime deps to start</div></div>
   </div>
 </div></header>
 
 <section id="features"><div class="wrap">
-  <div class="eyebrow">What it does</div>
-  <h2>One binary, a full Layer-1</h2>
-  <p class="sub">No JVM, no sprawling toolchain. Everything is a self-contained Rust workspace
-  with a pluggable “Prism” model for capabilities.</p>
+  <div class="center">
+    <div class="eyebrow">What it does</div>
+    <h2>One binary. A full Layer-1.</h2>
+    <p class="sub">No JVM, no sprawling toolchain — a self-contained Rust workspace with a pluggable “Prism” model for every capability.</p>
+  </div>
   <div class="grid">
-    <div class="card"><div class="ico">🔐</div><h3>Banking-grade privacy</h3>
-      <p>Each event is sealed per-party with ChaCha20-Poly1305. All nodes agree on a Merkle root of blinded data — only stakeholders decrypt their own events.</p></div>
-    <div class="card"><div class="ico">⟠</div><h3>Real EVM</h3>
-      <p>A from-scratch EVM: deploy &amp; call Solidity over <code>eth_*</code>, inter-contract calls, CREATE/CREATE2, and precompiles. MetaMask &amp; ethers.js just work.</p></div>
-    <div class="card"><div class="ico">🧠</div><h3>On-chain AI</h3>
-      <p>Register models and run deterministic inference (or a local LLM via Ollama). Results are committed and auditable, with large outputs offloaded to content-addressed storage.</p></div>
-    <div class="card"><div class="ico">⚖️</div><h3>BFT + slashing</h3>
-      <p>Aurora BFT finality with proposer failover. Equivocation and private-root divergence are caught cryptographically and slashed on-chain.</p></div>
-    <div class="card"><div class="ico">🧩</div><h3>Nine Prisms</h3>
-      <p>Token, NFT, Contract (PhotonVM), AI, Bridge, Staking, Oracle, Storage, Confidential — install what you need, build your own.</p></div>
-    <div class="card"><div class="ico">🛠️</div><h3>Rust &amp; TS SDKs</h3>
-      <p>JSON-RPC, WebSocket subscriptions, a web explorer, and first-class Rust + TypeScript SDKs for building applications.</p></div>
+    <div class="card"><div class="inner"><div class="ico">🔐</div><h3>Banking-grade privacy</h3>
+      <p>Each event is sealed per-party with ChaCha20-Poly1305. All nodes agree on a Merkle root of blinded data — only stakeholders can decrypt their own events.</p></div></div>
+    <div class="card"><div class="inner"><div class="ico">⟠</div><h3>Real EVM</h3>
+      <p>A from-scratch EVM: deploy &amp; call Solidity over <code>eth_*</code>, inter-contract calls, CREATE/CREATE2 and precompiles. MetaMask &amp; ethers.js just work.</p></div></div>
+    <div class="card"><div class="inner"><div class="ico">🧠</div><h3>On-chain AI</h3>
+      <p>Register models and run deterministic inference, or a local LLM via Ollama. Results are committed and auditable, with large outputs offloaded to storage.</p></div></div>
+    <div class="card"><div class="inner"><div class="ico">⚖️</div><h3>BFT + slashing</h3>
+      <p>Aurora BFT finality with proposer failover. Equivocation and private-root divergence are caught cryptographically and slashed on-chain.</p></div></div>
+    <div class="card"><div class="inner"><div class="ico">🧩</div><h3>Nine Prisms</h3>
+      <p>Token, NFT, Contract (PhotonVM), AI, Bridge, Staking, Oracle, Storage, Confidential — install what you need, or build your own.</p></div></div>
+    <div class="card"><div class="inner"><div class="ico">🛠️</div><h3>Rust &amp; TS SDKs</h3>
+      <p>JSON-RPC, WebSocket subscriptions, a web explorer, and first-class Rust + TypeScript SDKs for building real applications.</p></div></div>
   </div>
 </div></section>
 
 <section id="quickstart"><div class="wrap">
-  <div class="eyebrow">Quickstart</div>
-  <h2>Running in 60 seconds</h2>
-  <p class="sub">Build the binary and watch a full chain do its thing — AI, privacy, tokens, NFTs, and a contract — end to end.</p>
-  <div class="term">
-    <div class="bar"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
-<pre><span class="cm"># build the single binary</span>
+  <div class="center">
+    <div class="eyebrow">Quickstart</div>
+    <h2>Running in 60 seconds</h2>
+    <p class="sub">Build the binary, then watch a full chain do its thing — AI, privacy, tokens, NFTs and a contract — end to end.</p>
+  </div>
+  <div class="termwrap"><div class="term">
+    <div class="bar"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i><span class="t">veilux — zsh</span></div>
+<pre><code><span class="cm"># build the single binary</span>
 <span class="c1">$</span> cargo build --release
 
-<span class="cm"># see the kernel + installed prisms</span>
+<span class="cm"># inspect the kernel + installed prisms</span>
 <span class="c1">$</span> ./target/release/veilux <span class="c2">info</span>
 
 <span class="cm"># run the end-to-end demo (AI · privacy · token · NFT · contract)</span>
 <span class="c1">$</span> ./target/release/veilux <span class="c2">demo</span>
-  contract deployed at 0xcd69...7058
-  call result: 111 + 222 = <span class="ok">Some(333)</span>
+  contract deployed at <span class="c3">0xcd69…7058</span>
+  call result: 111 + 222 = <span class="ok">Some(333)</span>  ✓
 
 <span class="cm"># launch a dev RPC node + Ethereum-compatible endpoint</span>
-<span class="c1">$</span> ./target/release/veilux <span class="c2">serve</span> 127.0.0.1:8645 --eth-rpc 127.0.0.1:8655</pre>
-  </div>
+<span class="c1">$</span> ./target/release/veilux <span class="c2">serve</span> 127.0.0.1:8645 --eth-rpc 127.0.0.1:8655
+  <span class="ok">VEILUX dev RPC node online</span> · chainId 1 · add to MetaMask</code></pre>
+  </div></div>
 </div></section>
 
 <section id="compare"><div class="wrap">
-  <div class="eyebrow">How it compares</div>
-  <h2>Where VEILUX fits</h2>
-  <p class="sub">An honest look — not every box is checked, and that’s the point.</p>
+  <div class="center">
+    <div class="eyebrow">How it compares</div>
+    <h2>Where VEILUX fits</h2>
+    <p class="sub">An honest look — not every box is checked, and that’s exactly the point.</p>
+  </div>
   <div class="tablewrap"><table>
     <tr><th>Capability</th><th>VEILUX</th><th>Ethereum</th><th>Canton</th></tr>
-    <tr><td>EVM / Solidity</td><td class="yes">✓ built-in</td><td class="yes">✓ native</td><td class="no">✗</td></tr>
-    <tr><td>Per-party data privacy</td><td class="yes">✓ default</td><td class="no">✗ public</td><td class="yes">✓</td></tr>
-    <tr><td>On-chain AI inference</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
-    <tr><td>Permissionless &amp; open source</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">~ permissioned</td></tr>
-    <tr><td>Single self-contained binary</td><td class="yes">✓ Rust</td><td class="no">~</td><td class="no">✗ JVM</td></tr>
+    <tr><td>EVM / Solidity</td><td class="veilcol">✓ built-in</td><td class="yes">✓ native</td><td class="no">✗</td></tr>
+    <tr><td>Per-party data privacy</td><td class="veilcol">✓ by default</td><td class="no">✗ public</td><td class="yes">✓</td></tr>
+    <tr><td>On-chain AI inference</td><td class="veilcol">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
+    <tr><td>Permissionless &amp; open source</td><td class="veilcol">✓</td><td class="yes">✓</td><td class="mid">~ permissioned</td></tr>
+    <tr><td>Single self-contained binary</td><td class="veilcol">✓ Rust</td><td class="mid">~</td><td class="no">✗ JVM</td></tr>
     <tr><td>Independent audit</td><td class="no">✗ not yet</td><td class="yes">✓</td><td class="yes">✓</td></tr>
   </table></div>
 </div></section>
 
 <section id="docs"><div class="wrap">
-  <div class="eyebrow">Documentation</div>
-  <h2>Read the docs</h2>
-  <p class="sub">Everything is documented — from a 5-minute install to the deep privacy model.</p>
-  <div class="docs">
-    <a class="doc" href="INSTALL.html"><span class="e">🚀</span><span><b>Install, build &amp; run</b><span>Get a node up in minutes</span></span></a>
-    <a class="doc" href="architecture.html"><span class="e">🏛️</span><span><b>Architecture</b><span>Cascade, state model, design</span></span></a>
-    <a class="doc" href="evm-compat.html"><span class="e">⟠</span><span><b>EVM compatibility</b><span>Connect MetaMask &amp; ethers.js</span></span></a>
-    <a class="doc" href="rpc-sdk.html"><span class="e">🔌</span><span><b>RPC &amp; SDKs</b><span>JSON-RPC + Rust/TS SDKs</span></span></a>
-    <a class="doc" href="privacy-model.html"><span class="e">🔐</span><span><b>Privacy model</b><span>VeilLedger, banking-grade</span></span></a>
-    <a class="doc" href="consensus-networking.html"><span class="e">⚖️</span><span><b>Consensus &amp; networking</b><span>Aurora BFT, encrypted gossip</span></span></a>
-    <a class="doc" href="add-ons.html"><span class="e">🧩</span><span><b>Add-ons (Prisms)</b><span>All nine + token economics</span></span></a>
-    <a class="doc" href="ai-ollama.html"><span class="e">🧠</span><span><b>AI via Ollama</b><span>Run real local models</span></span></a>
-    <a class="doc" href="security.html"><span class="e">🛡️</span><span><b>Security model</b><span>Threat model + safe usage</span></span></a>
-    <a class="doc" href="audit-2026-06.html"><span class="e">📋</span><span><b>Internal audit (Jun 2026)</b><span>Findings &amp; fixes</span></span></a>
-    <a class="doc" href="roadmap.html"><span class="e">🗺️</span><span><b>Roadmap</b><span>What comes next</span></span></a>
-    <a class="doc" href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/CHANGELOG.md"><span class="e">📝</span><span><b>Changelog</b><span>Version history</span></span></a>
+  <div class="center">
+    <div class="eyebrow">Documentation</div>
+    <h2>Read the docs</h2>
+    <p class="sub">Everything is documented — from a 5-minute install to the deep privacy model.</p>
   </div>
-  <div style="margin-top:28px" class="note">
+  <div class="docs">
+    <a class="doc" href="INSTALL.html"><span class="e">🚀</span><span><b>Install, build &amp; run</b><small>Get a node up in minutes</small></span></a>
+    <a class="doc" href="architecture.html"><span class="e">🏛️</span><span><b>Architecture</b><small>Cascade, state model, design</small></span></a>
+    <a class="doc" href="evm-compat.html"><span class="e">⟠</span><span><b>EVM compatibility</b><small>MetaMask &amp; ethers.js</small></span></a>
+    <a class="doc" href="rpc-sdk.html"><span class="e">🔌</span><span><b>RPC &amp; SDKs</b><small>JSON-RPC + Rust/TS</small></span></a>
+    <a class="doc" href="privacy-model.html"><span class="e">🔐</span><span><b>Privacy model</b><small>VeilLedger, banking-grade</small></span></a>
+    <a class="doc" href="consensus-networking.html"><span class="e">⚖️</span><span><b>Consensus &amp; net</b><small>Aurora BFT, encrypted gossip</small></span></a>
+    <a class="doc" href="add-ons.html"><span class="e">🧩</span><span><b>Add-ons (Prisms)</b><small>All nine + economics</small></span></a>
+    <a class="doc" href="ai-ollama.html"><span class="e">🧠</span><span><b>AI via Ollama</b><small>Run real local models</small></span></a>
+    <a class="doc" href="security.html"><span class="e">🛡️</span><span><b>Security model</b><small>Threat model + safe usage</small></span></a>
+    <a class="doc" href="audit-2026-06.html"><span class="e">📋</span><span><b>Internal audit</b><small>June 2026 — findings &amp; fixes</small></span></a>
+    <a class="doc" href="roadmap.html"><span class="e">🗺️</span><span><b>Roadmap</b><small>What comes next</small></span></a>
+    <a class="doc" href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/CHANGELOG.md"><span class="e">📝</span><span><b>Changelog</b><small>Version history</small></span></a>
+  </div>
+  <div class="note">
     <b>Honest status.</b> VEILUX is a fully functional, test-covered <b>testnet-grade core</b>.
     It has <b>not</b> had an independent third-party audit and has not run a public mainnet —
-    do not secure real value with it yet. See the
+    don’t secure real value with it yet. See the
     <a href="audit-2026-06.html">internal audit</a> and <a href="security.html">security model</a>.
   </div>
 </div></section>
 
+<section><div class="wrap">
+  <div class="finalcta">
+    <div class="eyebrow">Get started</div>
+    <h2>Build something private.</h2>
+    <p class="sub" style="margin-bottom:30px">Clone the repo, build the binary, and have a private, EVM-compatible chain running locally in a minute.</p>
+    <div class="cta" style="margin-top:0">
+      <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary">★ Star on GitHub</a>
+      <a class="btn btn-ghost" href="INSTALL.html">Read the install guide</a>
+    </div>
+  </div>
+</div></section>
+
 <footer><div class="wrap">
-  <div class="brand">
-    <svg viewBox="0 0 64 64" style="width:22px;height:22px"><polygon points="32,4 58,32 32,60 6,32" fill="none" stroke="#38e1c4" stroke-width="4"/><polygon points="32,18 46,32 32,46 18,32" fill="#38e1c4"/></svg>
+  <div class="brand" style="font-size:15px">
+    <svg viewBox="0 0 64 64" style="width:22px;height:22px"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#56f0d0"/><stop offset="1" stop-color="#7c6cff"/></linearGradient></defs><polygon points="32,4 58,32 32,60 6,32" fill="none" stroke="url(#fg)" stroke-width="4"/><polygon points="32,18 46,32 32,46 18,32" fill="url(#fg)"/></svg>
     VEILUX
   </div>
   <div>Dual-licensed <a href="https://github.com/VeiluxLabs/Veilux-Binary/blob/main/LICENSE-MIT">MIT</a> /
