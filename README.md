@@ -37,7 +37,7 @@ defaults are:
 | | |
 |---|---|
 | Name / Ticker | Veilux / `LUX` |
-| Subunit | `lumen` (1 LUX = 10¹⁸ lumen) |
+| Subunit | `ray` (1 LUX = 10¹⁸ ray) |
 | Supply | set by genesis allocations |
 
 The native token powers **staking**, **governance voting weight**, **transaction

@@ -14,7 +14,7 @@ pub const PROTOCOL_VERSION: &str = "photon/1.0";
 
 pub const TOKEN_TICKER: &str = "LUX";
 
-pub const TOKEN_SUBUNIT: &str = "lumen";
+pub const TOKEN_SUBUNIT: &str = "ray";
 
 pub const TOKEN_DECIMALS: u32 = 18;
 
