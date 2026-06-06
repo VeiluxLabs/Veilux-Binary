@@ -27,6 +27,8 @@
     font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     line-height:1.65; -webkit-font-smoothing:antialiased; overflow-x:hidden;
   }
+  /* 3D WebGL canvas behind hero */
+  #scene{position:fixed; inset:0; width:100%; height:100vh; z-index:-3; pointer-events:none; opacity:.9}
   /* animated gradient mesh + grid */
   body::before{
     content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
@@ -164,9 +166,27 @@
   footer{border-top:1px solid var(--panel-brd); padding:40px 0; color:var(--dim); font-size:13.5px}
   footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; align-items:center}
   footer a{color:var(--muted)}
+
+  /* logo banner */
+  .logo-banner{max-width:560px; margin:0 auto 30px; border-radius:18px; overflow:hidden;
+      border:1px solid var(--panel-brd); box-shadow:0 20px 60px rgba(0,0,0,.5);
+      display:block; line-height:0}
+  .logo-banner img{width:100%; height:auto; display:block}
+
+  /* scroll reveal */
+  .reveal{opacity:0; transform:translateY(28px); transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1; transform:none}
+  .reveal.d1{transition-delay:.08s}.reveal.d2{transition-delay:.16s}.reveal.d3{transition-delay:.24s}
+  .reveal.d4{transition-delay:.32s}.reveal.d5{transition-delay:.4s}.reveal.d6{transition-delay:.48s}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1; transform:none; transition:none}}
+
+  /* 3D tilt cards */
+  .card{transform-style:preserve-3d; will-change:transform}
 </style>
 </head>
 <body>
+
+<canvas id="scene"></canvas>
 
 <nav><div class="wrap">
   <div class="brand">
@@ -183,15 +203,18 @@
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <span class="pill"><span class="ping"></span> Open source · v0.7.6 · Rust workspace</span>
-  <h1>The <span class="gradtext">privacy-first,<br>AI-native</span> Layer-1<br>blockchain in Rust</h1>
-  <p class="lead">Launch a network, deploy Solidity, move private value between named parties,
+  <a class="logo-banner reveal in" href="https://github.com/VeiluxLabs">
+    <img src="https://raw.githubusercontent.com/VeiluxLabs/.github/main/VeiLux-labs.jpg" alt="VEILUX Labs" loading="eager" />
+  </a>
+  <span class="pill reveal d1"><span class="ping"></span> Open source · v0.7.6 · Rust workspace</span>
+  <h1 class="reveal d2">The <span class="gradtext">privacy-first,<br>AI-native</span> Layer-1<br>blockchain in Rust</h1>
+  <p class="lead reveal d3">Launch a network, deploy Solidity, move private value between named parties,
   and run verifiable on-chain AI — all from a single self-contained binary.</p>
-  <div class="cta">
+  <div class="cta reveal d4">
     <a class="btn btn-primary" href="https://github.com/VeiluxLabs/Veilux-Binary"><i data-lucide="star"></i> Star on GitHub</a>
     <a class="btn btn-ghost" href="https://github.com/VeiluxLabs/Veilux-Binary/releases"><i data-lucide="download"></i> Download binary</a>
   </div>
-  <div class="heronums">
+  <div class="heronums reveal d5">
     <div><div class="n gradtext">9</div><div class="l">Prisms</div></div>
     <div><div class="n gradtext">EVM</div><div class="l">Solidity-ready</div></div>
     <div><div class="n gradtext">BFT</div><div class="l">+ slashing</div></div>
@@ -200,34 +223,34 @@
 </div></header>
 
 <section id="features"><div class="wrap">
-  <div class="center">
+  <div class="center reveal">
     <div class="eyebrow">What it does</div>
     <h2>One binary. A full Layer-1.</h2>
     <p class="sub">No JVM, no sprawling toolchain — a self-contained Rust workspace with a pluggable “Prism” model for every capability.</p>
   </div>
   <div class="grid">
-    <div class="card"><div class="inner"><div class="ico"><i data-lucide="shield-check"></i></div><h3>Banking-grade privacy</h3>
+    <div class="card reveal d1"><div class="inner"><div class="ico"><i data-lucide="shield-check"></i></div><h3>Banking-grade privacy</h3>
       <p>Each event is sealed per-party with ChaCha20-Poly1305. All nodes agree on a Merkle root of blinded data — only stakeholders can decrypt their own events.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico"><i data-lucide="file-code-2"></i></div><h3>Real EVM</h3>
+    <div class="card reveal d2"><div class="inner"><div class="ico"><i data-lucide="file-code-2"></i></div><h3>Real EVM</h3>
       <p>A from-scratch EVM: deploy &amp; call Solidity over <code>eth_*</code>, inter-contract calls, CREATE/CREATE2 and precompiles. MetaMask &amp; ethers.js just work.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico"><i data-lucide="brain-circuit"></i></div><h3>On-chain AI</h3>
+    <div class="card reveal d3"><div class="inner"><div class="ico"><i data-lucide="brain-circuit"></i></div><h3>On-chain AI</h3>
       <p>Register models and run deterministic inference, or a local LLM via Ollama. Results are committed and auditable, with large outputs offloaded to storage.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico"><i data-lucide="scale"></i></div><h3>BFT + slashing</h3>
+    <div class="card reveal d4"><div class="inner"><div class="ico"><i data-lucide="scale"></i></div><h3>BFT + slashing</h3>
       <p>Aurora BFT finality with proposer failover. Equivocation and private-root divergence are caught cryptographically and slashed on-chain.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico"><i data-lucide="blocks"></i></div><h3>Nine Prisms</h3>
+    <div class="card reveal d5"><div class="inner"><div class="ico"><i data-lucide="blocks"></i></div><h3>Nine Prisms</h3>
       <p>Token, NFT, Contract (PhotonVM), AI, Bridge, Staking, Oracle, Storage, Confidential — install what you need, or build your own.</p></div></div>
-    <div class="card"><div class="inner"><div class="ico"><i data-lucide="terminal"></i></div><h3>Rust &amp; TS SDKs</h3>
+    <div class="card reveal d6"><div class="inner"><div class="ico"><i data-lucide="terminal"></i></div><h3>Rust &amp; TS SDKs</h3>
       <p>JSON-RPC, WebSocket subscriptions, a web explorer, and first-class Rust + TypeScript SDKs for building real applications.</p></div></div>
   </div>
 </div></section>
 
 <section id="quickstart"><div class="wrap">
-  <div class="center">
+  <div class="center reveal">
     <div class="eyebrow">Quickstart</div>
     <h2>Running in 60 seconds</h2>
     <p class="sub">Build the binary, then watch a full chain do its thing — AI, privacy, tokens, NFTs and a contract — end to end.</p>
   </div>
-  <div class="termwrap"><div class="term">
+  <div class="termwrap reveal d1"><div class="term">
     <div class="bar"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i><span class="t">veilux — zsh</span></div>
 <pre><code><span class="cm"># build the single binary</span>
 <span class="c1">$</span> cargo build --release
@@ -247,12 +270,12 @@
 </div></section>
 
 <section id="compare"><div class="wrap">
-  <div class="center">
+  <div class="center reveal">
     <div class="eyebrow">How it compares</div>
     <h2>Where VEILUX fits</h2>
     <p class="sub">An honest look — not every box is checked, and that’s exactly the point.</p>
   </div>
-  <div class="tablewrap"><table>
+  <div class="tablewrap reveal d1"><table>
     <tr><th>Capability</th><th>VEILUX</th><th>Ethereum</th><th>Canton</th></tr>
     <tr><td>EVM / Solidity</td><td class="veilcol">✓ built-in</td><td class="yes">✓ native</td><td class="no">✗</td></tr>
     <tr><td>Per-party data privacy</td><td class="veilcol">✓ by default</td><td class="no">✗ public</td><td class="yes">✓</td></tr>
@@ -264,12 +287,12 @@
 </div></section>
 
 <section id="docs"><div class="wrap">
-  <div class="center">
+  <div class="center reveal">
     <div class="eyebrow">Documentation</div>
     <h2>Read the docs</h2>
     <p class="sub">Everything is documented — from a 5-minute install to the deep privacy model.</p>
   </div>
-  <div class="docs">
+  <div class="docs reveal d1">
     <a class="doc" href="INSTALL.html"><span class="e"><i data-lucide="rocket"></i></span><span><b>Install, build &amp; run</b><small>Get a node up in minutes</small></span></a>
     <a class="doc" href="architecture.html"><span class="e"><i data-lucide="layout-grid"></i></span><span><b>Architecture</b><small>Cascade, state model, design</small></span></a>
     <a class="doc" href="evm-compat.html"><span class="e"><i data-lucide="file-code-2"></i></span><span><b>EVM compatibility</b><small>MetaMask &amp; ethers.js</small></span></a>
@@ -292,7 +315,7 @@
 </div></section>
 
 <section><div class="wrap">
-  <div class="finalcta">
+  <div class="finalcta reveal">
     <div class="eyebrow">Get started</div>
     <h2>Build something private.</h2>
     <p class="sub" style="margin-bottom:30px">Clone the repo, build the binary, and have a private, EVM-compatible chain running locally in a minute.</p>
@@ -314,8 +337,95 @@
 </div></footer>
 
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-  if (window.lucide) { lucide.createIcons(); }
+  if (window.lucide) lucide.createIcons();
+
+  /* scroll reveal */
+  (function(){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, {threshold:.12, rootMargin:'0px 0px -8% 0px'});
+    document.querySelectorAll('.reveal:not(.in)').forEach(function(el){ io.observe(el); });
+  })();
+
+  /* card 3D tilt */
+  (function(){
+    if (window.matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+    document.querySelectorAll('.card').forEach(function(card){
+      card.addEventListener('mousemove', function(ev){
+        var r = card.getBoundingClientRect();
+        var px = (ev.clientX - r.left) / r.width - .5;
+        var py = (ev.clientY - r.top) / r.height - .5;
+        card.style.transform = 'perspective(800px) rotateY(' + (px*7) + 'deg) rotateX(' + (-py*7) + 'deg) translateY(-4px)';
+      });
+      card.addEventListener('mouseleave', function(){ card.style.transform = ''; });
+    });
+  })();
+
+  /* three.js animated prism + particle field */
+  (function(){
+    var canvas = document.getElementById('scene');
+    if (!canvas || !window.THREE) return;
+    if (window.matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+
+    var renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+    camera.position.z = 6;
+
+    function size(){
+      var w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    size(); window.addEventListener('resize', size);
+
+    /* central wireframe prism (octahedron reads as a crystal) */
+    var geo = new THREE.OctahedronGeometry(1.7, 0);
+    var wire = new THREE.WireframeGeometry(geo);
+    var line = new THREE.LineSegments(wire, new THREE.LineBasicMaterial({color:0x56f0d0, transparent:true, opacity:0.55}));
+    scene.add(line);
+    var glow = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0x7c6cff, transparent:true, opacity:0.06}));
+    scene.add(glow);
+
+    /* particle field */
+    var N = 900, pos = new Float32Array(N*3);
+    for (var i=0;i<N;i++){
+      pos[i*3]   = (Math.random()-.5)*22;
+      pos[i*3+1] = (Math.random()-.5)*14;
+      pos[i*3+2] = (Math.random()-.5)*12;
+    }
+    var pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    var points = new THREE.Points(pg, new THREE.PointsMaterial({color:0x9fb2c8, size:0.025, transparent:true, opacity:.7}));
+    scene.add(points);
+
+    var mx=0, my=0, tx=0, ty=0;
+    window.addEventListener('mousemove', function(e){
+      tx = (e.clientX/window.innerWidth - .5);
+      ty = (e.clientY/window.innerHeight - .5);
+    });
+    var scrollY = 0;
+    window.addEventListener('scroll', function(){ scrollY = window.scrollY; }, {passive:true});
+
+    var t=0;
+    function loop(){
+      t += 0.005;
+      mx += (tx - mx)*0.05; my += (ty - my)*0.05;
+      line.rotation.y = t + mx*0.8;
+      line.rotation.x = t*0.6 + my*0.6;
+      glow.rotation.copy(line.rotation);
+      var s = 1 + Math.sin(t*1.6)*0.04; glow.scale.setScalar(s);
+      points.rotation.y = t*0.12 + mx*0.3;
+      points.rotation.x = my*0.2;
+      camera.position.y = -scrollY*0.0016;
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+    loop();
+  })();
 </script>
 </body>
 </html>
