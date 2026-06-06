@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-06-07
+
+### Fixed
+- **Validator nodes now honor `--eth-rpc`.** The flag was only wired into the
+  `serve` subcommand, so passing `--eth-rpc` to `veilux validator` was silently
+  ignored and no EVM endpoint ever started. Validators now expose a **read-only**
+  Ethereum-compatible JSON-RPC endpoint (`eth_chainId`, `eth_blockNumber`,
+  `eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`, `eth_call`,
+  `eth_gasPrice`, `net_version`, `web3_clientVersion`) backed by a state snapshot
+  that is refreshed after each committed block — so it never touches the
+  consensus hot path. `eth_sendRawTransaction` is intentionally rejected on a
+  validator with a clear message (applying a raw tx directly on one validator
+  would bypass consensus and diverge state); submit writes to a `veilux serve`
+  node instead. Verified live: a 2-validator secure network served `eth_call`
+  (sha256 precompile) and a monotonically advancing `eth_blockNumber` while
+  consensus kept finalizing.
+
 ## [0.9.1] - 2026-06-07
 
 ### Added
@@ -736,7 +753,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.6...v0.8.0

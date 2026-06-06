@@ -28,6 +28,7 @@ pub struct ValidatorConfig {
     pub ip_allowlist: Vec<std::net::IpAddr>,
     pub genesis: Option<crate::genesis::ChainSpec>,
     pub rpc_addr: Option<String>,
+    pub eth_rpc_addr: Option<String>,
     pub host_parties: Vec<(String, String)>,
 }
 
@@ -192,6 +193,31 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
     let (ingress_tx, mut ingress_rx) = tokio::sync::mpsc::unbounded_channel::<SignedCommand>();
     let (private_tx, mut private_rx) =
         tokio::sync::mpsc::unbounded_channel::<veilux_veil::PrivateEnvelope>();
+
+    let eth_snapshot = if cfg.eth_rpc_addr.is_some() {
+        Some(Arc::new(Mutex::new(crate::eth_rpc::EthSnapshot {
+            state: eng.node.state.clone(),
+            height: eng.node.head().height,
+            timestamp: eng.node.head().timestamp,
+            base_price: eng.node.current_base_price(),
+        })))
+    } else {
+        None
+    };
+
+    if let (Some(eth_addr), Some(snap)) = (cfg.eth_rpc_addr.clone(), eth_snapshot.clone()) {
+        let chain_id = cfg.genesis.as_ref().map(|g| g.chain_id).unwrap_or(1);
+        let read_state = Arc::new(crate::eth_rpc::EthReadState {
+            snapshot: snap,
+            chain_id,
+        });
+        tokio::spawn(async move {
+            if let Err(e) = crate::eth_rpc::serve_eth_read_rpc(eth_addr, read_state).await {
+                warn!(error = %e, "eth-rpc server stopped");
+            }
+        });
+    }
+
     if let Some(rpc_addr) = cfg.rpc_addr.clone() {
         let (chain_id, network) = cfg
             .genesis
@@ -221,11 +247,13 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
             _ = ticker.tick() => {
                 on_tick(&mut eng, &net).await;
                 *head_height.lock().await = eng.node.head().height;
+                refresh_eth_snapshot(&eng, &eth_snapshot).await;
             }
             maybe_msg = net.inbound.recv() => {
                 let Some(msg) = maybe_msg else { break; };
                 handle_message(msg, &net, &mut eng).await;
                 *head_height.lock().await = eng.node.head().height;
+                refresh_eth_snapshot(&eng, &eth_snapshot).await;
             }
             Some(signed) = ingress_rx.recv() => {
                 match eng.node.submit_signed(signed.clone()) {
@@ -590,4 +618,21 @@ fn verify_view_change(vc: &ViewChange, vset: &ValidatorSet) -> bool {
         return false;
     }
     veilux_veil::verify_bytes(&vc.public_key, &vc.signing_bytes(), &vc.signature).is_ok()
+}
+
+async fn refresh_eth_snapshot(
+    eng: &Engine,
+    snap: &Option<Arc<Mutex<crate::eth_rpc::EthSnapshot>>>,
+) {
+    if let Some(snap) = snap {
+        let head_height = eng.node.head().height;
+        let mut s = snap.lock().await;
+        if s.height != head_height {
+            let head = eng.node.head();
+            s.state = eng.node.state.clone();
+            s.height = head.height;
+            s.timestamp = head.timestamp;
+            s.base_price = eng.node.current_base_price();
+        }
+    }
 }

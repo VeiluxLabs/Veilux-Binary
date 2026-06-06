@@ -246,33 +246,46 @@ pub struct EthApplied {
     pub logs: Vec<Log>,
 }
 
+pub fn eth_call_state(
+    state: &StateTree,
+    chain_id: u64,
+    height: u64,
+    timestamp: u64,
+    to: &[u8; 20],
+    calldata: Vec<u8>,
+) -> Result<Vec<u8>, EthError> {
+    let to_word = addr_to_u256(to);
+    if veilux_evm::precompile::is_precompile(&to_word) {
+        return Ok(veilux_evm::precompile::execute(&to_word, &calldata).unwrap_or_default());
+    }
+    let code = eth_code(state, to);
+    if code.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut probe = state.clone();
+    let mut host = StateHost::new(&mut probe, chain_id, height, timestamp);
+    let ctx = CallContext {
+        caller: U256::ZERO,
+        address: to_word,
+        value: U256::ZERO,
+        calldata,
+        gas_limit: MAX_EVM_GAS,
+    };
+    let out = veilux_evm::vm::execute_frame(&code, &ctx, &mut host, 0, false)
+        .map_err(|e| EthError::Vm(e.to_string()))?;
+    Ok(out.return_data)
+}
+
 impl Node {
     pub fn eth_call(&self, to: &[u8; 20], calldata: Vec<u8>) -> Result<Vec<u8>, EthError> {
-        let to_word = addr_to_u256(to);
-        if veilux_evm::precompile::is_precompile(&to_word) {
-            return Ok(veilux_evm::precompile::execute(&to_word, &calldata).unwrap_or_default());
-        }
-        let code = eth_code(&self.state, to);
-        if code.is_empty() {
-            return Ok(vec![]);
-        }
-        let mut probe = self.state.clone();
-        let mut host = StateHost::new(
-            &mut probe,
+        eth_call_state(
+            &self.state,
             self.chain_id,
             self.head().height,
             self.head().timestamp,
-        );
-        let ctx = CallContext {
-            caller: U256::ZERO,
-            address: addr_to_u256(to),
-            value: U256::ZERO,
+            to,
             calldata,
-            gas_limit: MAX_EVM_GAS,
-        };
-        let out = veilux_evm::vm::execute_frame(&code, &ctx, &mut host, 0, false)
-            .map_err(|e| EthError::Vm(e.to_string()))?;
-        Ok(out.return_data)
+        )
     }
 
     pub fn eth_apply_raw(&mut self, raw: &[u8]) -> Result<EthApplied, EthError> {

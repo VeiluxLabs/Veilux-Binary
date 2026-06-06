@@ -290,6 +290,12 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         .and_then(|i| args.get(i + 1))
         .cloned();
 
+    let eth_rpc_addr = args
+        .iter()
+        .position(|a| a == "--eth-rpc")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+
     let host_parties: Vec<(String, String)> = args
         .iter()
         .enumerate()
@@ -313,6 +319,7 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         ip_allowlist,
         genesis,
         rpc_addr,
+        eth_rpc_addr,
         host_parties,
     };
 

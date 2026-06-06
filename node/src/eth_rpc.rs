@@ -355,3 +355,103 @@ fn ok<T: serde::Serialize>(id: serde_json::Value, result: T) -> RpcResponse {
         serde_json::to_value(result).unwrap_or(serde_json::Value::Null),
     )
 }
+
+pub struct EthSnapshot {
+    pub state: veilux_kernel::StateTree,
+    pub height: u64,
+    pub timestamp: u64,
+    pub base_price: u128,
+}
+
+pub struct EthReadState {
+    pub snapshot: Arc<Mutex<EthSnapshot>>,
+    pub chain_id: u64,
+}
+
+pub async fn serve_eth_read_rpc(addr: String, state: Arc<EthReadState>) -> std::io::Result<()> {
+    let server = RpcServer::new(addr.clone());
+    info!(%addr, chain_id = state.chain_id, "Ethereum-compatible read RPC (eth_*) online (validator)");
+    server
+        .serve(move |req| {
+            let state = Arc::clone(&state);
+            async move { dispatch_read(state, req).await }
+        })
+        .await
+}
+
+async fn dispatch_read(state: Arc<EthReadState>, req: RpcRequest) -> RpcResponse {
+    let id = req.id.clone();
+    match req.method.as_str() {
+        "eth_chainId" => ok(id, hex_quantity(state.chain_id as u128)),
+        "net_version" => ok(id, state.chain_id.to_string()),
+        "eth_syncing" => ok(id, false),
+        "net_listening" => ok(id, true),
+        "web3_clientVersion" => ok(id, format!("veilux/{}", env!("CARGO_PKG_VERSION"))),
+        "eth_gasPrice" => {
+            let s = state.snapshot.lock().await;
+            ok(id, hex_quantity(s.base_price.max(1)))
+        }
+        "eth_estimateGas" => ok(id, "0x5208"),
+        "eth_blockNumber" => {
+            let s = state.snapshot.lock().await;
+            ok(id, hex_quantity(s.height as u128))
+        }
+        "eth_getBalance" => {
+            let Some(addr) = first_str(&req, 0).and_then(|s| parse_addr(&s)) else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "bad address");
+            };
+            let s = state.snapshot.lock().await;
+            ok(id, hex_quantity(eth_balance(&s.state, &addr)))
+        }
+        "eth_getTransactionCount" => {
+            let Some(addr) = first_str(&req, 0).and_then(|s| parse_addr(&s)) else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "bad address");
+            };
+            let s = state.snapshot.lock().await;
+            ok(id, hex_quantity(eth_nonce(&s.state, &addr) as u128))
+        }
+        "eth_getCode" => {
+            let Some(addr) = first_str(&req, 0).and_then(|s| parse_addr(&s)) else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "bad address");
+            };
+            let s = state.snapshot.lock().await;
+            ok(id, format!("0x{}", hex::encode(eth_code(&s.state, &addr))))
+        }
+        "eth_call" => {
+            let to = req
+                .params
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|o| o.get("to"))
+                .and_then(|v| v.as_str())
+                .and_then(parse_addr);
+            let data = req
+                .params
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|o| o.get("data"))
+                .and_then(|v| v.as_str())
+                .map(|s| hex::decode(s.strip_prefix("0x").unwrap_or(s)).unwrap_or_default())
+                .unwrap_or_default();
+            let Some(to) = to else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'to'");
+            };
+            let s = state.snapshot.lock().await;
+            match crate::eth::eth_call_state(&s.state, state.chain_id, s.height, s.timestamp, &to, data)
+            {
+                Ok(out) => ok(id, format!("0x{}", hex::encode(out))),
+                Err(e) => RpcResponse::err(id, codes::COMMAND_REJECTED, e.to_string()),
+            }
+        }
+        "eth_sendRawTransaction" => RpcResponse::err(
+            id,
+            codes::METHOD_NOT_FOUND,
+            "this validator exposes a read-only eth endpoint; submit transactions to a `veilux serve` node".to_string(),
+        ),
+        other => RpcResponse::err(
+            id,
+            codes::METHOD_NOT_FOUND,
+            format!("validator eth-rpc is read-only; '{other}' not served (use a full `serve` node)"),
+        ),
+    }
+}
