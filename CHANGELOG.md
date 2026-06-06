@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-06-06
+
+### Added
+- **`ripemd160` EVM precompile (address `0x03`)** — completes the common
+  Ethereum precompile set alongside `ecrecover` (0x01), `sha256` (0x02),
+  `identity` (0x04), and `modexp` (0x05). Output follows the Ethereum layout
+  (20-byte digest left-padded into a 32-byte word). Test:
+  `ripemd160_known_vector`.
+
+### Changed
+- **Durable persistence (fsync).** All on-disk writes now flush to stable
+  storage before returning: `append_block` and `append_pending` `fsync` the log
+  file, and every atomic snapshot (`save_state`, `save_private_state`,
+  `save_private_commitments`, `rewrite_pending`) writes to a temp file, `fsync`s
+  it, renames into place, then `fsync`s the directory. This prevents block,
+  state, mempool, and private-commitment loss or torn writes on power failure or
+  OS crash. Test: `durable_writes_leave_no_tmp_files`.
+
+### Docs
+- Corrected stale production-readiness claims: inter-contract EVM calls
+  (`CALL`/`CALLCODE`/`DELEGATECALL`/`STATICCALL`/`CREATE`/`CREATE2`) and the
+  `ripemd160` precompile are **shipped** (they were still listed as missing).
+  Only BN/BLS pairing precompiles and a fork-exact gas schedule remain on the EVM
+  gap list. Updated `README.md` and `docs/evm-compat.md` accordingly.
+
 ## [0.7.4] - 2026-06-06
 
 ### Security
@@ -625,7 +650,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.1...v0.7.2

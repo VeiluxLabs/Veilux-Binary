@@ -1,11 +1,12 @@
 use crate::u256::U256;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
 
 use crate::keccak256;
 
 pub fn is_precompile(address: &U256) -> bool {
-    matches!(low_address(address), 1 | 2 | 4 | 5)
+    matches!(low_address(address), 1..=5)
 }
 
 fn low_address(address: &U256) -> u64 {
@@ -22,6 +23,7 @@ pub fn execute(address: &U256, input: &[u8]) -> Option<Vec<u8>> {
     match low_address(address) {
         1 => Some(ecrecover(input)),
         2 => Some(sha256(input)),
+        3 => Some(ripemd160(input)),
         4 => Some(input.to_vec()),
         5 => Some(modexp(input)),
         _ => None,
@@ -33,10 +35,20 @@ pub fn gas_cost(address: &U256, input: &[u8]) -> u64 {
     match low_address(address) {
         1 => 3_000,
         2 => 60 + 12 * words,
+        3 => 600 + 120 * words,
         4 => 15 + 3 * words,
         5 => 200,
         _ => 0,
     }
+}
+
+fn ripemd160(input: &[u8]) -> Vec<u8> {
+    let mut h = Ripemd160::new();
+    h.update(input);
+    let digest = h.finalize();
+    let mut out = vec![0u8; 32];
+    out[12..].copy_from_slice(&digest);
+    out
 }
 
 fn ecrecover(input: &[u8]) -> Vec<u8> {
@@ -156,6 +168,16 @@ mod tests {
         assert_eq!(
             hex::encode(out),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn ripemd160_known_vector() {
+        let out = ripemd160(b"abc");
+        assert_eq!(
+            hex::encode(&out),
+            "0000000000000000000000008eb208f7e05d987a9b044a8e98c6b087f15a0bfc",
+            "ripemd160('abc') left-padded into a 32-byte word (Ethereum precompile layout)"
         );
     }
 

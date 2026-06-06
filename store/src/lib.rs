@@ -45,11 +45,27 @@ impl Store {
         &self.dir
     }
 
+    fn atomic_write(&self, final_path: &Path, tmp: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+        {
+            let mut f = File::create(tmp)?;
+            f.write_all(bytes)?;
+            f.flush()?;
+            f.sync_all()?;
+        }
+        fs::rename(tmp, final_path)?;
+        if let Ok(dirf) = File::open(&self.dir) {
+            let _ = dirf.sync_all();
+        }
+        Ok(())
+    }
+
     pub fn append_block(&self, block: &Block) -> Result<(), StoreError> {
         let mut f = OpenOptions::new().append(true).open(&self.blocks_path)?;
         let line = serde_json::to_string(block)?;
         writeln!(f, "{line}")?;
-        debug!(height = block.height, "block appended to log");
+        f.flush()?;
+        f.sync_all()?;
+        debug!(height = block.height, "block appended to log (fsync'd)");
         Ok(())
     }
 
@@ -82,9 +98,8 @@ impl Store {
     pub fn save_state(&self, state: &StateTree) -> Result<(), StoreError> {
         let tmp = self.state_path.with_extension("json.tmp");
         let bytes = serde_json::to_vec(state)?;
-        fs::write(&tmp, &bytes)?;
-        fs::rename(&tmp, &self.state_path)?;
-        debug!(entries = state.len(), "state snapshot saved");
+        self.atomic_write(&self.state_path, &tmp, &bytes)?;
+        debug!(entries = state.len(), "state snapshot saved (fsync'd)");
         Ok(())
     }
 
@@ -101,8 +116,7 @@ impl Store {
         let path = self.dir.join("private_state.json");
         let tmp = path.with_extension("json.tmp");
         let bytes = serde_json::to_vec(state)?;
-        fs::write(&tmp, &bytes)?;
-        fs::rename(&tmp, &path)?;
+        self.atomic_write(&path, &tmp, &bytes)?;
         Ok(())
     }
 
@@ -120,8 +134,7 @@ impl Store {
         let path = self.dir.join("private_commitments.json");
         let tmp = path.with_extension("json.tmp");
         let bytes = serde_json::to_vec(commitments)?;
-        fs::write(&tmp, &bytes)?;
-        fs::rename(&tmp, &path)?;
+        self.atomic_write(&path, &tmp, &bytes)?;
         Ok(())
     }
 
@@ -142,7 +155,9 @@ impl Store {
             .open(&self.mempool_path)?;
         let line = serde_json::to_string(signed)?;
         writeln!(f, "{line}")?;
-        debug!(party = %signed.command.submitter.0, nonce = signed.command.nonce, "pending tx persisted");
+        f.flush()?;
+        f.sync_all()?;
+        debug!(party = %signed.command.submitter.0, nonce = signed.command.nonce, "pending tx persisted (fsync'd)");
         Ok(())
     }
 
@@ -168,14 +183,20 @@ impl Store {
 
     pub fn rewrite_pending(&self, pending: &[SignedCommand]) -> Result<(), StoreError> {
         let tmp = self.mempool_path.with_extension("jsonl.tmp");
-        let mut f = File::create(&tmp)?;
-        for signed in pending {
-            let line = serde_json::to_string(signed)?;
-            writeln!(f, "{line}")?;
+        {
+            let mut f = File::create(&tmp)?;
+            for signed in pending {
+                let line = serde_json::to_string(signed)?;
+                writeln!(f, "{line}")?;
+            }
+            f.flush()?;
+            f.sync_all()?;
         }
-        f.flush()?;
         fs::rename(&tmp, &self.mempool_path)?;
-        debug!(count = pending.len(), "mempool log rewritten");
+        if let Ok(dirf) = File::open(&self.dir) {
+            let _ = dirf.sync_all();
+        }
+        debug!(count = pending.len(), "mempool log rewritten (fsync'd)");
         Ok(())
     }
 }
@@ -226,6 +247,34 @@ mod tests {
         let dir = tmp_dir("empty");
         let store = Store::open(&dir).unwrap();
         assert!(store.load_state().unwrap().is_none());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn durable_writes_leave_no_tmp_files() {
+        let dir = tmp_dir("durable");
+        let store = Store::open(&dir).unwrap();
+        let mut st = StateTree::new();
+        st.put("a", vec![9, 9, 9]);
+        store.save_state(&st).unwrap();
+        store.save_private_state(&st).unwrap();
+        store
+            .save_private_commitments(&[Hash([1u8; 32]), Hash([2u8; 32])])
+            .unwrap();
+
+        let leftover: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().map(|x| x == "tmp").unwrap_or(false))
+            .collect();
+        assert!(
+            leftover.is_empty(),
+            "atomic rename must leave no .tmp files behind"
+        );
+
+        let reloaded = store.load_state().unwrap().unwrap();
+        assert_eq!(reloaded.get("a"), Some(&vec![9, 9, 9]));
+        assert_eq!(store.load_private_commitments().unwrap().len(), 2);
         fs::remove_dir_all(&dir).ok();
     }
 }

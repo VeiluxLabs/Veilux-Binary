@@ -200,10 +200,8 @@ differentiators — not yet for securing large public value (see readiness below
 
 - 🔜 **Independent third-party security audit** (the single most important gap)
 - 🔜 Public testnet with real adversarial load and incentive testing
-- 🔜 Inter-contract EVM `CALL`/`CREATE` from within a running frame for complex
-  DeFi (single-frame contracts work today)
 - 🔜 HSM / keystore key management (keys are seed-derived in memory today)
-- 🔜 Fork-exact EVM gas schedule + missing precompiles (`ripemd160`, BN/BLS pairings)
+- 🔜 Fork-exact EVM gas schedule + remaining precompiles (BN/BLS pairings; `ecrecover`, `sha256`, `ripemd160`, `identity`, `modexp` ship today)
 - 🔜 ZK-blind confidential transfers (amounts hidden but not yet zero-knowledge-proven)
 - 🔜 Light clients, formal spec, and large-scale fuzzing
 
@@ -249,7 +247,7 @@ token economics with fees and staking, a from-scratch EVM execution layer
 Rust and TypeScript SDKs — all covered by tests and continuous integration. It has
 not yet run a public mainnet; treat it as a testnet-grade core. See
 `docs/security.md` for the honest threat model and remaining hardening items
-(ZK-blind confidential transfers, HSM key management, inter-contract EVM calls),
+(ZK-blind confidential transfers, HSM key management, fork-exact EVM gas),
 and [`docs/audit-2026-06.md`](docs/audit-2026-06.md) for the **internal security
 audit** (findings + fixes). An independent third-party audit is still required
 before any value-bearing deployment.

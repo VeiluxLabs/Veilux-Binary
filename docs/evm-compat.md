@@ -108,9 +108,10 @@ address.
   DoS-safe), but the per-opcode costs are approximate rather than a byte-exact
   match of a specific Ethereum hard fork. Contracts run correctly; absolute gas
   numbers will differ from mainnet.
-- **No precompiled contracts yet** (`ecrecover`, `sha256`, `modexp`, the BN/BLS
-  pairing precompiles at addresses `0x01`–`0x0a`). Contracts that rely on them
-  will revert when calling those addresses.
+- **Precompiles: `ecrecover` (0x01), `sha256` (0x02), `ripemd160` (0x03),
+  `identity` (0x04), and `modexp` (0x05) ship today.** The BN/BLS pairing
+  precompiles (`0x06`–`0x0a`) are not yet implemented; contracts that call those
+  addresses will get empty output.
 - **Legacy + EIP-155 transactions only.** Typed-envelope transactions
   (EIP-2718/1559, `0x02…`) are rejected; configure wallets to use legacy gas.
 - **Global chain-id uniqueness is a social convention.** To avoid clashes,
