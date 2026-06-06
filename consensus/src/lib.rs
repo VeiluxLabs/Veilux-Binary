@@ -114,14 +114,35 @@ impl Aurora {
     }
 
     pub fn add_vote(&mut self, vote: &Vote) -> Result<CommitOutcome, ConsensusError> {
+        let v = self
+            .validators
+            .get(&vote.voter)
+            .ok_or_else(|| ConsensusError::Vote(VoteError::NotValidator(vote.voter.0.clone())))?;
+        if vote.signature.is_empty() {
+            return Err(ConsensusError::BadVoteSignature(
+                "missing vote signature".into(),
+            ));
+        }
+        veilux_veil::verify_bytes(&v.public_key, &vote.signing_bytes(), &vote.signature)
+            .map_err(|e| ConsensusError::BadVoteSignature(e.to_string()))?;
+        self.tally_vote(vote)
+    }
+
+    pub fn add_local_vote(&mut self, vote: &Vote) -> Result<CommitOutcome, ConsensusError> {
+        match &self.me {
+            Some(me) if *me == vote.voter => {}
+            _ => {
+                return Err(ConsensusError::BadVoteSignature(
+                    "add_local_vote called for a non-local voter".into(),
+                ))
+            }
+        }
+        self.tally_vote(vote)
+    }
+
+    fn tally_vote(&mut self, vote: &Vote) -> Result<CommitOutcome, ConsensusError> {
         if self.committed.contains_key(&vote.height) {
             return Ok(CommitOutcome::AlreadyCommitted);
-        }
-        if let Some(v) = self.validators.get(&vote.voter) {
-            if !vote.signature.is_empty() {
-                veilux_veil::verify_bytes(&v.public_key, &vote.signing_bytes(), &vote.signature)
-                    .map_err(|e| ConsensusError::BadVoteSignature(e.to_string()))?;
-            }
         }
         let vset = &self.validators;
         let quorum = vset.quorum_threshold();
@@ -196,39 +217,88 @@ pub enum CommitOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use veilux_veil::PartyIdentity;
+
+    fn ident(name: &str) -> PartyIdentity {
+        let mut seed = [0u8; 32];
+        let b = name.as_bytes();
+        seed[..b.len().min(32)].copy_from_slice(&b[..b.len().min(32)]);
+        PartyIdentity::from_seed(name, &seed)
+    }
 
     fn engine() -> Aurora {
         let mut vs = ValidatorSet::new();
         for i in 1..=4u8 {
+            let name = format!("v{i}");
+            let id = ident(&name);
             vs.add(Validator::new(
-                PartyId::new(format!("v{i}")),
-                vec![i; 32],
+                PartyId::new(name),
+                id.public_key().to_vec(),
                 100,
             ));
         }
         Aurora::new(ConsensusConfig::default(), vs, Some(PartyId::new("v1")))
     }
 
-    fn precommit(voter: &str, height: u64, block: Hash) -> Vote {
-        Vote {
-            height,
-            round: 0,
-            block_hash: block,
-            voter: PartyId::new(voter),
-            kind: VoteKind::Precommit,
-            signature: vec![],
-        }
-    }
-
-    fn vote_at(voter: &str, height: u64, round: u32, block: Hash, kind: VoteKind) -> Vote {
-        Vote {
+    fn signed(voter: &str, height: u64, round: u32, block: Hash, kind: VoteKind) -> Vote {
+        let mut v = Vote {
             height,
             round,
             block_hash: block,
             voter: PartyId::new(voter),
             kind,
             signature: vec![],
-        }
+        };
+        v.signature = ident(voter).sign_bytes(&v.signing_bytes());
+        v
+    }
+
+    fn precommit(voter: &str, height: u64, block: Hash) -> Vote {
+        signed(voter, height, 0, block, VoteKind::Precommit)
+    }
+
+    fn vote_at(voter: &str, height: u64, round: u32, block: Hash, kind: VoteKind) -> Vote {
+        signed(voter, height, round, block, kind)
+    }
+
+    #[test]
+    fn rejects_unsigned_network_vote() {
+        let mut e = engine();
+        let b = Hash::digest(b"blk");
+        let unsigned = Vote {
+            height: 1,
+            round: 0,
+            block_hash: b,
+            voter: PartyId::new("v2"),
+            kind: VoteKind::Precommit,
+            signature: vec![],
+        };
+        assert!(
+            matches!(
+                e.add_vote(&unsigned),
+                Err(ConsensusError::BadVoteSignature(_))
+            ),
+            "a network vote with an empty signature must be rejected, not counted toward quorum"
+        );
+    }
+
+    #[test]
+    fn rejects_forged_signature_for_another_validator() {
+        let mut e = engine();
+        let b = Hash::digest(b"blk");
+        let mut v = Vote {
+            height: 1,
+            round: 0,
+            block_hash: b,
+            voter: PartyId::new("v2"),
+            kind: VoteKind::Precommit,
+            signature: vec![],
+        };
+        v.signature = ident("attacker").sign_bytes(&v.signing_bytes());
+        assert!(
+            matches!(e.add_vote(&v), Err(ConsensusError::BadVoteSignature(_))),
+            "a vote signed by the wrong key must be rejected"
+        );
     }
 
     #[test]

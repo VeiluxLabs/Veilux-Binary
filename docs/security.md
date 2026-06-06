@@ -207,6 +207,27 @@ check.
   (sybil majority fails to slash) and `quorum_minority_liar_is_slashed_end_to_end`
   (a genuine in-envelope majority does slash the real minority liar).
 
+### 2.16 Empty-signature consensus vote bypass (CRITICAL, found & fixed)
+- **Check:** Are all consensus votes that count toward a finality quorum
+  signature-verified against the voter's registered validator key?
+- **Exploit (critical):** `Aurora::add_vote` only verified a vote's signature
+  when the signature field was non-empty. Inbound network votes flow straight
+  into `add_vote`, so an attacker could submit votes attributed to any validator
+  with `signature: []` and have them counted toward the stake-weighted quorum
+  unverified — fabricating a 2/3+ quorum and finalizing an arbitrary or
+  conflicting block (full BFT-safety loss / chain takeover). Reachable by any
+  network peer without `--secure`, or any single Byzantine validator with it.
+- **Fix:** the network path `add_vote` now requires a non-empty, valid signature
+  (and a known validator) or returns `BadVoteSignature`; a separate
+  `add_local_vote` is the only path that accepts the node's own unsigned
+  self-votes, and only when the voter equals the node's own identity. Votes are
+  signed before broadcast, so honest consensus is unchanged.
+- **Tests:** `consensus::tests::rejects_unsigned_network_vote`,
+  `rejects_forged_signature_for_another_validator`; updated multi-validator
+  finality tests sign votes with real identities. Verified live: a 4-validator
+  network finalizes at quorum 267 under strict verification.
+- See `docs/audit-2026-06.md` §C-1 for the full write-up.
+
 ---
 
 ## 3. Residual risks / out of scope (current build)

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-06-06
+
+### Security
+- **CRITICAL: fixed an empty-signature consensus vote bypass** found in a full
+  internal audit (`docs/audit-2026-06.md`). `Aurora::add_vote` only verified a
+  vote's Ed25519 signature when the signature field was non-empty, so a network
+  peer could submit votes attributed to any validator with an empty signature and
+  have them counted toward the finality quorum unverified — enough to fabricate a
+  2/3+ quorum and finalize an arbitrary block (total BFT-safety loss). The fix
+  splits the trusted local path (`add_local_vote`, accepts only the node's own
+  self-votes) from the strict network path (`add_vote`, now requires a valid
+  signature from a known validator). Honest multi-node consensus is unchanged
+  (votes are signed before broadcast); verified live on a 4-validator network.
+  Tests: `rejects_unsigned_network_vote`,
+  `rejects_forged_signature_for_another_validator`.
+
+### Added
+- **`docs/audit-2026-06.md`** — a full internal security audit report covering
+  consensus, ingress, crypto, block validity, privacy, economics, transport, and
+  every Prism, with findings (1 critical fixed here, 1 high fixed in 0.7.3) and an
+  honest statement that an independent third-party audit is still required.
+
 ## [0.7.3] - 2026-06-06
 
 ### Security
@@ -603,7 +625,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.0...v0.7.1

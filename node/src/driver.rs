@@ -79,7 +79,7 @@ impl RoundMachine {
         aurora: &mut Aurora,
     ) -> (Vec<Action>, Option<CommitOutcome>) {
         let vote = self.make_vote(me, block_hash, kind);
-        let outcome = aurora.add_vote(&vote).ok();
+        let outcome = aurora.add_local_vote(&vote).ok();
         self.my_votes.push(vote.clone());
         (
             vec![Action::Broadcast(Outbound::Vote(Box::new(vote)))],
@@ -218,13 +218,27 @@ impl RoundMachine {
 mod tests {
     use super::*;
     use veilux_consensus::{ConsensusConfig, Validator, ValidatorSet};
+    use veilux_veil::PartyIdentity;
+
+    fn ident(name: &str) -> PartyIdentity {
+        let mut seed = [0u8; 32];
+        let b = name.as_bytes();
+        seed[..b.len().min(32)].copy_from_slice(&b[..b.len().min(32)]);
+        PartyIdentity::from_seed(name, &seed)
+    }
+
+    fn sign(mut vote: Vote) -> Vote {
+        let id = ident(&vote.voter.0);
+        vote.signature = id.sign_bytes(&vote.signing_bytes());
+        vote
+    }
 
     fn validators(names: &[&str]) -> ValidatorSet {
         let mut vs = ValidatorSet::new();
-        for (i, n) in names.iter().enumerate() {
+        for n in names {
             vs.add(Validator::new(
                 PartyId::new(*n),
-                vec![(i + 1) as u8; 32],
+                ident(n).public_key().to_vec(),
                 100,
             ));
         }
@@ -291,7 +305,7 @@ mod tests {
             };
             for a in acts {
                 if let Action::Broadcast(Outbound::Vote(v)) = a {
-                    prevotes.push(*v);
+                    prevotes.push(sign(*v));
                 }
             }
         }
@@ -306,7 +320,7 @@ mod tests {
                 }
                 for a in machines[i].on_vote(pv.clone(), &PartyId::new(*n), &mut engines[i]) {
                     match a {
-                        Action::Broadcast(Outbound::Vote(v)) => precommits.push((i, *v)),
+                        Action::Broadcast(Outbound::Vote(v)) => precommits.push((i, sign(*v))),
                         Action::Commit(_) => commits += 1,
                         _ => {}
                     }
