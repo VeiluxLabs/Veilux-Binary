@@ -323,18 +323,18 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 
 | Doc | What's inside |
 |-----|---------------|
-| `docs/INSTALL.md` | Install, build, run, troubleshoot, CI/CD, Docker |
-| `docs/architecture.md` | System design, cascade, state model |
-| `docs/add-ons.md` | Per-Prism specs (all nine) + native token, fees & genesis + how to build your own |
-| `docs/consensus-networking.md` | Aurora BFT consensus, authenticated transport, persistence, and gossip |
-| `docs/rpc-sdk.md` | JSON-RPC API + Rust & TypeScript SDKs for building applications |
-| `docs/evm-compat.md` | Ethereum-compatible `eth_*` RPC — connect MetaMask & ethers.js |
-| `docs/ai-ollama.md` | Running real AI models via Ollama |
-| `docs/privacy-model.md` | Deep VeilLedger banking-grade privacy research |
-| `docs/security.md` | Threat model + exploitation review + what runs safely |
+| [`docs/INSTALL.md`](docs/INSTALL.md) | Install, build, run, troubleshoot, CI/CD, Docker |
+| [`docs/architecture.md`](docs/architecture.md) | System design, cascade, state model |
+| [`docs/add-ons.md`](docs/add-ons.md) | Per-Prism specs (all nine) + native token, fees & genesis + how to build your own |
+| [`docs/consensus-networking.md`](docs/consensus-networking.md) | Aurora BFT consensus, authenticated transport, persistence, and gossip |
+| [`docs/rpc-sdk.md`](docs/rpc-sdk.md) | JSON-RPC API + Rust & TypeScript SDKs for building applications |
+| [`docs/evm-compat.md`](docs/evm-compat.md) | Ethereum-compatible `eth_*` RPC — connect MetaMask & ethers.js |
+| [`docs/ai-ollama.md`](docs/ai-ollama.md) | Running real AI models via Ollama |
+| [`docs/privacy-model.md`](docs/privacy-model.md) | Deep VeilLedger banking-grade privacy research |
+| [`docs/security.md`](docs/security.md) | Threat model + exploitation review + what runs safely |
 | [`docs/audit-2026-06.md`](docs/audit-2026-06.md) | **Internal security audit (June 2026)** — full manual review, findings & fixes |
-| `docs/roadmap.md` | Future add-ons the chain needs next |
-| `CHANGELOG.md` | Version history (Keep a Changelog format) |
+| [`docs/roadmap.md`](docs/roadmap.md) | Future add-ons the chain needs next |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history (Keep a Changelog format) |
 
 ## Writing your own Prism
 
