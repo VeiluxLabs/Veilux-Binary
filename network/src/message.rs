@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use veilux_consensus::Vote;
 use veilux_kernel::{Block, SignedCommand};
+use veilux_veil::PrivateEnvelope;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "t", content = "d")]
@@ -13,6 +14,7 @@ pub enum NetMessage {
     RequestBlocks { from_height: u64 },
     Blocks { blocks: Vec<Block> },
     ViewChange(Box<ViewChange>),
+    Private(Box<PrivateEnvelope>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,6 +57,7 @@ impl NetMessage {
             NetMessage::RequestBlocks { .. } => "request_blocks",
             NetMessage::Blocks { .. } => "blocks",
             NetMessage::ViewChange(_) => "view_change",
+            NetMessage::Private(_) => "private",
         }
     }
 }
@@ -82,5 +85,33 @@ mod tests {
         let line = m.encode().unwrap();
         let back = NetMessage::decode(&line).unwrap();
         assert_eq!(back.kind(), "block");
+    }
+
+    #[test]
+    fn private_envelope_roundtrip() {
+        use veilux_veil::{seal_private, ViewKeyring};
+        let alice = ViewKeyring::from_passphrase(PartyId::new("alice"), "a");
+        let inner = veilux_kernel::Command {
+            prism: "token".into(),
+            submitter: PartyId::new("alice"),
+            visibility: veilux_kernel::Visibility::Parties(vec![PartyId::new("alice")]),
+            payload: b"secret".to_vec(),
+            nonce: 0,
+        };
+        let env = seal_private(
+            &inner,
+            &[PartyId::new("alice")],
+            &[alice],
+            veilux_kernel::Hash::digest(b"s"),
+        )
+        .unwrap();
+        let m = NetMessage::Private(Box::new(env));
+        let line = m.encode().unwrap();
+        let back = NetMessage::decode(&line).unwrap();
+        assert_eq!(back.kind(), "private");
+        assert!(
+            !line.contains("secret"),
+            "plaintext must not appear on the wire"
+        );
     }
 }

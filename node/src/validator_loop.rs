@@ -28,6 +28,7 @@ pub struct ValidatorConfig {
     pub ip_allowlist: Vec<std::net::IpAddr>,
     pub genesis: Option<crate::genesis::ChainSpec>,
     pub rpc_addr: Option<String>,
+    pub host_parties: Vec<(String, String)>,
 }
 
 const VIEW_TIMEOUT_TICKS: u32 = 3;
@@ -127,6 +128,14 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
         }
     }
 
+    for (name, pass) in &cfg.host_parties {
+        node.host_party(veilux_veil::ViewKeyring::from_passphrase(
+            PartyId::new(name),
+            pass,
+        ));
+        info!(party = %name, "hosting confidential-execution stakeholder");
+    }
+
     let vset = validator_set(&(cfg.name.clone(), cfg.seed), &cfg.peers);
     let aurora = Aurora::new(ConsensusConfig::default(), vset.clone(), Some(me.clone()));
 
@@ -181,6 +190,8 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
     };
 
     let (ingress_tx, mut ingress_rx) = tokio::sync::mpsc::unbounded_channel::<SignedCommand>();
+    let (private_tx, mut private_rx) =
+        tokio::sync::mpsc::unbounded_channel::<veilux_veil::PrivateEnvelope>();
     if let Some(rpc_addr) = cfg.rpc_addr.clone() {
         let (chain_id, network) = cfg
             .genesis
@@ -189,6 +200,7 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
             .unwrap_or((1, "veilux-dev".to_string()));
         let state = IngressState {
             tx: ingress_tx,
+            private_tx,
             height: Arc::clone(&head_height),
             network,
             chain_id,
@@ -221,6 +233,19 @@ pub async fn run_validator(cfg: ValidatorConfig) -> Result<()> {
                         let _ = net.net.broadcast(&NetMessage::Command(Box::new(signed)));
                     }
                     Err(e) => debug!(error = %e, "rejected ingress command"),
+                }
+            }
+            Some(envelope) = private_rx.recv() => {
+                match eng.node.apply_private_envelope(&envelope) {
+                    Ok(out) => {
+                        info!(
+                            commitment = %out.commitment,
+                            executed = out.executed,
+                            "confidential envelope applied; gossiping"
+                        );
+                        let _ = net.net.broadcast(&NetMessage::Private(Box::new(envelope)));
+                    }
+                    Err(e) => debug!(error = %e, "rejected ingress private envelope"),
                 }
             }
             _ = &mut shutdown => {
@@ -308,6 +333,19 @@ async fn handle_message(msg: NetMessage, net: &NetHandle, eng: &mut Engine) {
         NetMessage::Command(signed) => {
             if let Err(e) = eng.node.submit_signed(*signed) {
                 debug!(error = %e, "rejected gossiped command");
+            }
+        }
+        NetMessage::Private(envelope) => {
+            let commitment = envelope.commitment;
+            match eng.node.apply_private_envelope(&envelope) {
+                Ok(out) => {
+                    if out.executed {
+                        info!(commitment = %commitment, "confidential envelope executed (stakeholder)");
+                    } else {
+                        debug!(commitment = %commitment, "confidential envelope recorded (non-stakeholder)");
+                    }
+                }
+                Err(e) => debug!(error = %e, "rejected gossiped private envelope"),
             }
         }
         NetMessage::Block(block) => {

@@ -6,10 +6,12 @@ use tracing::info;
 use veilux_kernel::SignedCommand;
 use veilux_rpc::server::RpcServer;
 use veilux_rpc::types::{codes, RpcRequest, RpcResponse, SubmitResult};
+use veilux_veil::PrivateEnvelope;
 
 #[derive(Clone)]
 pub struct IngressState {
     pub tx: UnboundedSender<SignedCommand>,
+    pub private_tx: UnboundedSender<PrivateEnvelope>,
     pub height: Arc<Mutex<u64>>,
     pub network: String,
     pub chain_id: u64,
@@ -62,6 +64,30 @@ async fn dispatch(state: IngressState, req: RpcRequest) -> RpcResponse {
                         command_id,
                         mempool_len: 0,
                     },
+                ),
+                Err(_) => {
+                    RpcResponse::err(id, codes::INTERNAL_ERROR, "consensus loop unavailable")
+                }
+            }
+        }
+        "veilux_submitPrivate" => {
+            let envelope: Option<PrivateEnvelope> = req
+                .params
+                .get("envelope")
+                .cloned()
+                .or_else(|| Some(req.params.clone()))
+                .and_then(|v| serde_json::from_value(v).ok());
+            let Some(envelope) = envelope else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing/invalid 'envelope'");
+            };
+            if !envelope.verify_commitment() {
+                return RpcResponse::err(id, codes::COMMAND_REJECTED, "bad commitment");
+            }
+            let commitment = envelope.commitment.to_hex();
+            match state.private_tx.send(envelope) {
+                Ok(()) => ok(
+                    id,
+                    serde_json::json!({ "accepted": true, "commitment": commitment }),
                 ),
                 Err(_) => {
                     RpcResponse::err(id, codes::INTERNAL_ERROR, "consensus loop unavailable")

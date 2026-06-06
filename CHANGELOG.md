@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-06-06
+
+### Added
+- **Confidential transactions gossip across the network (private execution goes
+  multi-node).** A new `NetMessage::Private` carries a `PrivateEnvelope` over the
+  P2P transport. A validator's tx-ingress now accepts `veilux_submitPrivate`;
+  the envelope is applied locally and **gossiped** to every peer. Each receiving
+  validator that hosts a stakeholder party decrypts its sealed share and executes
+  the inner command into its private state; validators that are not parties record
+  only the commitment. Validators can host parties with
+  `veilux validator --host-party NAME:PASSPHRASE`. **Verified live on a 3-validator
+  network:** a confidential token tx submitted to one validator's RPC propagated
+  by gossip so the two stakeholder validators (alice, bob) each executed it into
+  their private state (the secret amount `7777` present only there) while the
+  third, non-stakeholder validator held just the commitment — no `private_state.json`
+  at all. The plaintext never appears on the wire (`private_envelope_roundtrip`
+  test asserts this).
+
 ## [0.6.4] - 2026-06-06
 
 ### Added
@@ -508,7 +526,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.1...v0.6.2

@@ -144,7 +144,10 @@ empty), and that a tampered envelope is rejected.
 > results). There is not yet a cross-stakeholder agreement *proof* on the private
 > root (a stakeholder could in principle diverge locally), nor are sealed shares
 > wrapped to X25519 recipient public keys (they use the per-party seed). Those
-> are the next hardening steps (§7).
+> are the next hardening steps (§7). Envelope **distribution is done**: a
+> confidential transaction submitted to one validator is gossiped over the P2P
+> network (`NetMessage::Private`) so every stakeholder node receives and executes
+> it, verified live on a multi-validator network.
 
 #### Try it live
 

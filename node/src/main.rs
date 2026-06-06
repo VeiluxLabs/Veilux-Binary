@@ -282,6 +282,17 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         .and_then(|i| args.get(i + 1))
         .cloned();
 
+    let host_parties: Vec<(String, String)> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--host-party")
+        .filter_map(|(i, _)| args.get(i + 1))
+        .filter_map(|s| {
+            s.split_once(':')
+                .map(|(n, p)| (n.to_string(), p.to_string()))
+        })
+        .collect();
+
     let cfg = validator_loop::ValidatorConfig {
         name,
         seed: seed_from(&seed_str),
@@ -294,6 +305,7 @@ fn cmd_validator(args: &[String]) -> Result<()> {
         ip_allowlist,
         genesis,
         rpc_addr,
+        host_parties,
     };
 
     let rt = tokio::runtime::Builder::new_multi_thread()
