@@ -11,3 +11,4 @@ thiserror.workspace = true
 hex.workspace = true
 k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 sha3 = "0.10"
+sha2 = "0.10"

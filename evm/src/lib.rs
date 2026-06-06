@@ -1,3 +1,4 @@
+pub mod precompile;
 pub mod rlp;
 pub mod u256;
 pub mod vm;

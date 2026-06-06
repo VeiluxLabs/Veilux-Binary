@@ -506,6 +506,27 @@ impl<'a, H: Host> Interpreter<'a, H> {
             self.host.transfer(&self.ctx.address, &target, call_value);
         }
 
+        if crate::precompile::is_precompile(&code_addr) {
+            let pre_gas = crate::precompile::gas_cost(&code_addr, &calldata);
+            self.charge(pre_gas)?;
+            match crate::precompile::execute(&code_addr, &calldata) {
+                Some(output) => {
+                    self.host.commit_snapshot(snap);
+                    self.ret_buffer = output.clone();
+                    let n = ret_len.min(output.len());
+                    if n > 0 {
+                        self.mem_store(ret_off, &output[..n])?;
+                    }
+                    return self.push(U256::ONE);
+                }
+                None => {
+                    self.host.revert(snap);
+                    self.ret_buffer.clear();
+                    return self.push(U256::ZERO);
+                }
+            }
+        }
+
         let code = self.host.code(&code_addr);
         if code.is_empty() {
             self.host.commit_snapshot(snap);
@@ -1400,6 +1421,48 @@ mod tests {
         assert!(
             result.is_ok(),
             "recursive self-calls must terminate via depth/gas bound, not overflow the native stack: {result:?}"
+        );
+    }
+
+    #[test]
+    fn staticcall_to_sha256_precompile_returns_hash() {
+        let mut host = MemHost {
+            chain_id: 1,
+            ..Default::default()
+        };
+
+        let mut code = Vec::new();
+        code.extend_from_slice(&[0x60, 0x61]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.push(0x53);
+        code.extend_from_slice(&[0x60, 0x20]);
+        code.extend_from_slice(&[0x60, 0x20]);
+        code.extend_from_slice(&[0x60, 0x01]);
+        code.extend_from_slice(&[0x60, 0x00]);
+        code.extend_from_slice(&[0x60, 0x02]);
+        code.extend_from_slice(&[0x62, 0x0f, 0x42, 0x40]);
+        code.push(0xfa);
+        code.push(0x50);
+        code.extend_from_slice(&[0x60, 0x20, 0x60, 0x20, 0xf3]);
+
+        let ctx = CallContext {
+            caller: U256::from_u64(0xcafe),
+            address: U256::from_u64(0x1234),
+            value: U256::ZERO,
+            calldata: vec![],
+            gas_limit: 10_000_000,
+        };
+        let out = Interpreter::new(&code, &ctx, &mut host).run().unwrap();
+        assert!(out.success, "staticcall to sha256 must succeed");
+        let expected = {
+            use sha2::{Digest, Sha256};
+            let mut h = Sha256::new();
+            h.update([0x61u8]);
+            h.finalize().to_vec()
+        };
+        assert_eq!(
+            out.return_data, expected,
+            "the contract must return sha256(0x61) computed by the precompile at address 0x02"
         );
     }
 }
