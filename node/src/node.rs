@@ -872,12 +872,12 @@ mod tests {
             .head()
             .events
             .iter()
-            .find_map(|e| {
-                match serde_json::from_slice::<prism_dex::DexEvent>(&e.payload).ok()? {
+            .find_map(
+                |e| match serde_json::from_slice::<prism_dex::DexEvent>(&e.payload).ok()? {
                     prism_dex::DexEvent::PoolCreated { pool, .. } => Some(pool),
                     _ => None,
-                }
-            })
+                },
+            )
             .expect("pool created");
 
         let add = prism_dex::add_liquidity_command(
@@ -906,7 +906,10 @@ mod tests {
         let after = prism_token::balance_of(&n.state, &b, &PartyId::new("lp"));
         assert!(after > before, "swap must credit token B to the trader");
         let pool_state = prism_dex::pool_of(&n.state, &pool).unwrap();
-        assert_eq!(pool_state.reserve_a, 110_000, "pool reserve A grows by amount_in");
+        assert_eq!(
+            pool_state.reserve_a, 110_000,
+            "pool reserve A grows by amount_in"
+        );
     }
 
     #[test]
@@ -953,12 +956,8 @@ mod tests {
             })
             .expect("schedule created");
 
-        let release = prism_vesting::release_command(
-            PartyId::new("team"),
-            Visibility::Public,
-            0,
-            schedule,
-        );
+        let release =
+            prism_vesting::release_command(PartyId::new("team"), Visibility::Public, 0, schedule);
         let team = PartyIdentity::from_seed("team", &[5u8; 32]);
         n.submit_signed(team.sign(release)).unwrap();
         n.produce_block().unwrap();
