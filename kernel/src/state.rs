@@ -92,6 +92,21 @@ impl StateTree {
             .collect();
         merkle_root(&leaves)
     }
+
+    pub fn leaf_hash(key: &str, value: &[u8]) -> Hash {
+        Hash::commit("kv", &[key.as_bytes(), value])
+    }
+
+    pub fn prove(&self, key: &str) -> Option<(Vec<u8>, Vec<crate::crypto::MerkleStep>)> {
+        let value = self.entries.get(key)?.clone();
+        let leaves: Vec<Hash> = self
+            .entries
+            .iter()
+            .map(|(k, v)| Hash::commit("kv", &[k.as_bytes(), v]))
+            .collect();
+        let index = self.entries.keys().position(|k| k == key)?;
+        Some((value, crate::crypto::merkle_proof(&leaves, index)))
+    }
 }
 
 #[cfg(test)]

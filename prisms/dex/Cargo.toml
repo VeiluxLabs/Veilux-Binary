@@ -1,0 +1,15 @@
+[package]
+name = "prism-dex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "DEX Prism — constant-product (x*y=k) AMM pools, liquidity and swaps for VEILUX tokens"
+
+[dependencies]
+veilux-kernel.workspace = true
+prism-token.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+blake3.workspace = true

@@ -1,6 +1,6 @@
 {
   "name": "@veilux/sdk",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "VEILUX TypeScript SDK — build, sign, and submit commands to a VEILUX node",
   "license": "MIT",
   "author": "nathan <nathan@winnode.xyz>",

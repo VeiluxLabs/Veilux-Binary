@@ -94,6 +94,57 @@ pub fn merkle_root(leaves: &[Hash]) -> Hash {
     level[0]
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MerkleStep {
+    pub sibling: Hash,
+    pub sibling_on_right: bool,
+}
+
+pub fn merkle_proof(leaves: &[Hash], index: usize) -> Vec<MerkleStep> {
+    let mut proof = Vec::new();
+    if index >= leaves.len() {
+        return proof;
+    }
+    let mut idx = index;
+    let mut level: Vec<Hash> = leaves.to_vec();
+    while level.len() > 1 {
+        let sibling_idx = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
+        let sibling = if sibling_idx < level.len() {
+            level[sibling_idx]
+        } else {
+            level[idx]
+        };
+        proof.push(MerkleStep {
+            sibling,
+            sibling_on_right: idx % 2 == 0,
+        });
+        let mut next = Vec::with_capacity((level.len() + 1) / 2);
+        for chunk in level.chunks(2) {
+            let combined = if chunk.len() == 2 {
+                Hash::combine(&chunk[0], &chunk[1])
+            } else {
+                Hash::combine(&chunk[0], &chunk[0])
+            };
+            next.push(combined);
+        }
+        level = next;
+        idx /= 2;
+    }
+    proof
+}
+
+pub fn verify_merkle_proof(leaf: &Hash, proof: &[MerkleStep], root: &Hash) -> bool {
+    let mut acc = *leaf;
+    for step in proof {
+        acc = if step.sibling_on_right {
+            Hash::combine(&acc, &step.sibling)
+        } else {
+            Hash::combine(&step.sibling, &acc)
+        };
+    }
+    &acc == root
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

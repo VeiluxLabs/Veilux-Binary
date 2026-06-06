@@ -223,7 +223,10 @@ impl Prism for MultisigPrism {
                 )];
                 let mut derived = Vec::new();
                 if reached {
-                    events.push(Self::event(command, MultisigEvent::Executed { account, seq }));
+                    events.push(Self::event(
+                        command,
+                        MultisigEvent::Executed { account, seq },
+                    ));
                     derived.push((*inner).clone());
                 }
                 Ok(PrismOutput {
@@ -257,7 +260,10 @@ impl Prism for MultisigPrism {
                 let mut derived = Vec::new();
                 if reached {
                     tx.executed = true;
-                    events.push(Self::event(command, MultisigEvent::Executed { account, seq }));
+                    events.push(Self::event(
+                        command,
+                        MultisigEvent::Executed { account, seq },
+                    ));
                     derived.push(tx.inner.clone());
                 }
                 state
@@ -286,7 +292,14 @@ impl Prism for MultisigPrism {
                     .put_json(Self::tx_key(&account, seq), &tx)
                     .map_err(|e| PrismError::Internal(e.to_string()))?;
                 Ok(PrismOutput::single(
-                    Self::event(command, MultisigEvent::Revoked { account, seq, by: caller }),
+                    Self::event(
+                        command,
+                        MultisigEvent::Revoked {
+                            account,
+                            seq,
+                            by: caller,
+                        },
+                    ),
                     800,
                 ))
             }
@@ -409,13 +422,7 @@ mod tests {
         let mut s = StateTree::new();
         let id = acc_id(&p.handle(&create(&["a", "b", "c"], 2), &mut s).unwrap());
 
-        let propose = propose_command(
-            PartyId::new("a"),
-            Visibility::Public,
-            1,
-            id,
-            dummy_inner(),
-        );
+        let propose = propose_command(PartyId::new("a"), Visibility::Public, 1, id, dummy_inner());
         let out = p.handle(&propose, &mut s).unwrap();
         assert!(
             out.derived_commands.is_empty(),
@@ -437,8 +444,7 @@ mod tests {
         let p = MultisigPrism::new();
         let mut s = StateTree::new();
         let id = acc_id(&p.handle(&create(&["a", "b"], 1), &mut s).unwrap());
-        let propose =
-            propose_command(PartyId::new("a"), Visibility::Public, 1, id, dummy_inner());
+        let propose = propose_command(PartyId::new("a"), Visibility::Public, 1, id, dummy_inner());
         let out = p.handle(&propose, &mut s).unwrap();
         assert_eq!(out.derived_commands.len(), 1);
     }

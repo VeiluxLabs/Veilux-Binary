@@ -16,6 +16,8 @@ use prism_ai::{infer_command, register_command, AiEvent, AiPrism, ModelKind};
 use prism_bridge::BridgePrism;
 use prism_confidential::ConfidentialPrism;
 use prism_contract::{call_command, deploy_command, vm, ContractEvent, ContractPrism};
+use prism_dex::DexPrism;
+use prism_multisig::MultisigPrism;
 use prism_name::{register_command as name_register, NamePrism};
 use prism_nft::{create_collection_command, owner_of, NftCommand, NftEvent, NftPrism};
 use prism_oracle::OraclePrism;
@@ -25,6 +27,7 @@ use prism_token::{
     balance_of, create_command as token_create, transfer_command as token_transfer, TokenEvent,
     TokenPrism,
 };
+use prism_vesting::VestingPrism;
 use veilux_consensus::{Aurora, ConsensusConfig, Validator, ValidatorSet};
 use veilux_kernel::{Cascade, Hash, PartyId, Visibility, PROTOCOL_VERSION, TOKEN_TICKER};
 use veilux_store::Store;
@@ -108,7 +111,10 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .install(Box::new(StakingPrism::new()))
         .install(Box::new(OraclePrism::new()))
         .install(Box::new(ConfidentialPrism::new()))
-        .install(Box::new(NamePrism::new()));
+        .install(Box::new(NamePrism::new()))
+        .install(Box::new(MultisigPrism::new()))
+        .install(Box::new(VestingPrism::new()))
+        .install(Box::new(DexPrism::new()));
 
     let store = Store::open(&datadir)?;
     let mut node = Node::with_store(PartyId::new("dev-node"), cascade, store)
@@ -405,7 +411,10 @@ fn build_node(proposer: &str) -> Node {
         .install(Box::new(StakingPrism::new()))
         .install(Box::new(OraclePrism::new()))
         .install(Box::new(ConfidentialPrism::new()))
-        .install(Box::new(NamePrism::new()));
+        .install(Box::new(NamePrism::new()))
+        .install(Box::new(MultisigPrism::new()))
+        .install(Box::new(VestingPrism::new()))
+        .install(Box::new(DexPrism::new()));
     Node::new(PartyId::new(proposer), cascade)
 }
 
@@ -423,7 +432,10 @@ fn cmd_run(datadir: &str) -> Result<()> {
         .install(Box::new(StakingPrism::new()))
         .install(Box::new(OraclePrism::new()))
         .install(Box::new(ConfidentialPrism::new()))
-        .install(Box::new(NamePrism::new()));
+        .install(Box::new(NamePrism::new()))
+        .install(Box::new(MultisigPrism::new()))
+        .install(Box::new(VestingPrism::new()))
+        .install(Box::new(DexPrism::new()));
 
     let store = Store::open(datadir)?;
     let proposer = PartyId::new("validator-0");

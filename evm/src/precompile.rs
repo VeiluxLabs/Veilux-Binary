@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use crate::keccak256;
 
 pub fn is_precompile(address: &U256) -> bool {
-    matches!(low_address(address), 1..=5)
+    matches!(low_address(address), 1..=7)
 }
 
 fn low_address(address: &U256) -> u64 {
@@ -26,6 +26,8 @@ pub fn execute(address: &U256, input: &[u8]) -> Option<Vec<u8>> {
         3 => Some(ripemd160(input)),
         4 => Some(input.to_vec()),
         5 => Some(modexp(input)),
+        6 => Some(crate::bn254::ec_add(input).unwrap_or_else(|| vec![0u8; 64])),
+        7 => Some(crate::bn254::ec_mul(input).unwrap_or_else(|| vec![0u8; 64])),
         _ => None,
     }
 }
@@ -38,6 +40,8 @@ pub fn gas_cost(address: &U256, input: &[u8]) -> u64 {
         3 => 600 + 120 * words,
         4 => 15 + 3 * words,
         5 => 200,
+        6 => 150,
+        7 => 6_000,
         _ => 0,
     }
 }

@@ -17,7 +17,7 @@ VEILUX is built around three ideas:
 
 1. **A featherweight core.** The *Photon* kernel knows almost nothing. It defines the data shapes, one extension trait (`Prism`), a pipeline (`Cascade`), and a content-addressed state. That's it. Everything heavy is an add-on you compile in only if you need it. Release binaries are built for speed (`opt-level = 3`, LTO, stripped) yet still tiny (~2.9 MB).
 
-2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Ten ship today: **Token**, **NFT**, **Contract** (PhotonVM), **AI** (+ optional Ollama), **Storage**, **Bridge** (cross-chain), **Staking & Governance**, **Oracle**, **Confidential Token**, and **Name Service** (VNS — ENS-like human-readable names). They **cascade**: one Prism can trigger another (the AI Prism offloads large results to the Storage Prism automatically). Add your own by implementing one trait — no kernel fork.
+2. **Everything is a Prism (add-on).** A *Prism* is a self-contained capability. Thirteen ship today: **Token**, **NFT**, **Contract** (PhotonVM), **AI** (+ optional Ollama), **Storage**, **Bridge** (cross-chain), **Staking & Governance**, **Oracle**, **Confidential Token**, **Name Service** (VNS — ENS-like names), **Multisig** (M-of-N shared accounts), **Vesting** (token-lock schedules), and **DEX** (constant-product AMM). They **cascade**: one Prism can trigger another (multisig dispatches the inner command it approves; the AI Prism offloads large results to the Storage Prism). Add your own by implementing one trait — no kernel fork.
 
 3. **Privacy by ledger (VeilLedger).** The *Veil* layer gives you one logically shared ledger where **no participant sees data they aren't a stakeholder of**. Every node agrees on the same Merkle root of *blinded commitments*, while contents are sealed per-party into encrypted **views** and stored in per-party **sub-ledgers**.
 
@@ -201,7 +201,7 @@ differentiators — not yet for securing large public value (see readiness below
 - 🔜 **Independent third-party security audit** (the single most important gap)
 - 🔜 Public testnet with real adversarial load and incentive testing
 - 🔜 HSM / keystore key management (keys are seed-derived in memory today)
-- 🔜 Fork-exact EVM gas schedule + remaining precompiles (BN/BLS pairings; `ecrecover`, `sha256`, `ripemd160`, `identity`, `modexp` ship today)
+- 🔜 Fork-exact EVM gas schedule + the BN254 pairing precompile (`0x08`); `ecrecover`, `sha256`, `ripemd160`, `identity`, `modexp`, and BN254 `ecAdd`/`ecMul` (`0x01`–`0x07`) ship today
 - 🔜 ZK-blind confidential transfers (amounts hidden but not yet zero-knowledge-proven)
 - 🔜 Light clients, formal spec, and large-scale fuzzing
 
@@ -241,7 +241,7 @@ Primary audiences:
 
 VEILUX is a fully functional chain: live multi-node BFT consensus with proposer
 failover and auto-slashing, persistence (with a restart-safe mempool), an
-authenticated **and encrypted** gossip network, privacy, ten Prisms, configurable
+authenticated **and encrypted** gossip network, privacy, thirteen Prisms, configurable
 token economics with fees and staking, a from-scratch EVM execution layer
 (deploy + call Solidity bytecode over `eth_*`), and JSON-RPC + WebSocket APIs with
 Rust and TypeScript SDKs — all covered by tests and continuous integration. It has
@@ -422,7 +422,7 @@ See **`docs/INSTALL.md`** for a full setup, troubleshooting, and library quick-s
 |-----|---------------|
 | [`docs/INSTALL.md`](docs/INSTALL.md) | Install, build, run, troubleshoot, CI/CD, Docker |
 | [`docs/architecture.md`](docs/architecture.md) | System design, cascade, state model |
-| [`docs/add-ons.md`](docs/add-ons.md) | Per-Prism specs (all ten) + native token, fees & genesis + how to build your own |
+| [`docs/add-ons.md`](docs/add-ons.md) | Per-Prism specs (all thirteen) + native token, fees & genesis + how to build your own |
 | [`docs/consensus-networking.md`](docs/consensus-networking.md) | Aurora BFT consensus, authenticated transport, persistence, and gossip |
 | [`docs/rpc-sdk.md`](docs/rpc-sdk.md) | JSON-RPC API + Rust & TypeScript SDKs for building applications |
 | [`docs/evm-compat.md`](docs/evm-compat.md) | Ethereum-compatible `eth_*` RPC — connect MetaMask & ethers.js |

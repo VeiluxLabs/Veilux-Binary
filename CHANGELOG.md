@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-07
+
+### Added
+- **Multisig Prism — M-of-N shared accounts.** Create an account with a set of
+  owners and a threshold, `propose` an inner command, `confirm`/`revoke`, and the
+  approved command is dispatched automatically through the cascade once the
+  threshold is reached. Five unit tests (2-of-3 execution, 1-of-N immediate,
+  non-owner rejection, double-confirm guard, bad-threshold validation).
+- **Vesting Prism — token-lock schedules.** Cliff + linear release of escrowed
+  tokens to a beneficiary over time (driven by `chain/now`), with optional
+  funder revoke that pays out the vested portion and refunds the rest. Four unit
+  tests (linear release, revoke split, non-revocable guard, insufficient
+  balance).
+- **DEX Prism — constant-product (x·y=k) AMM.** Create pools, add/remove
+  liquidity (LP shares via √(a·b)), and swap with a 0.30% fee and a `min_out`
+  slippage guard. Four unit tests (constant-product swap math + fee, liquidity
+  round-trip, slippage guard, same-token rejection).
+- **EVM BN254 precompiles `ecAdd` (`0x06`) and `ecMul` (`0x07`).** From-scratch
+  alt_bn128 G1 point arithmetic over the 254-bit prime field (on-curve checks,
+  add/double/scalar-mul, modular inverse via Fermat). Six tests covering the
+  generator, doubling, scalar-mul distributivity, point inverse, and the
+  precompile round-trip. The pairing precompile (`0x08`) remains the one EVM gap.
+- **Light client (`veilux-lightclient` crate).** Verify a chain of block headers
+  by hash-linking without full state, plus Merkle **state-inclusion proofs**
+  (`merkle_proof`/`verify_merkle_proof` in the kernel; `StateTree::prove`) so a
+  wallet can verify a specific key/value against a trusted `state_root`. Four
+  tests (valid header chain, forged-parent rejection, real inclusion proof,
+  tampered-value rejection).
+
+### Changed
+- Block commit now records the block timestamp into state as `chain/now`,
+  enabling time-aware Prisms (vesting, name expiry) to read a deterministic
+  clock. The timestamp is computed once per block to keep `state_root`
+  deterministic between assembly and commit.
+
 ## [0.8.0] - 2026-06-07
 
 ### Added
@@ -679,7 +714,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.4...v0.7.5

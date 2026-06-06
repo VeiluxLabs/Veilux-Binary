@@ -5,7 +5,9 @@ pub mod state;
 pub mod types;
 
 pub use cascade::{Cascade, CascadeError, CascadeReceipt};
-pub use crypto::{merkle_root as merkle_root_of, Hash};
+pub use crypto::{
+    merkle_proof, merkle_root as merkle_root_of, verify_merkle_proof, Hash, MerkleStep,
+};
 pub use prism::{Prism, PrismError, PrismInfo, PrismOutput};
 pub use state::{StateError, StateTree};
 pub use types::{Block, Command, Event, PartyId, SignedCommand, Visibility};
