@@ -1,0 +1,15 @@
+[package]
+name = "prism-vesting"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Vesting Prism — time-locked token release schedules (cliff + linear) for VEILUX"
+
+[dependencies]
+veilux-kernel.workspace = true
+prism-token.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+blake3.workspace = true
