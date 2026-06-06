@@ -210,6 +210,50 @@ async fn dispatch(node: Arc<Mutex<Node>>, hub: Arc<WsHub>, req: RpcRequest) -> R
             )
         }
 
+        method::RESOLVE_NAME => {
+            let name = req.params.get("name").and_then(|v| v.as_str());
+            let Some(name) = name else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'name'");
+            };
+            let n = node.lock().await;
+            match prism_name::resolve(&n.state, name) {
+                Some(target) => ok(
+                    id,
+                    serde_json::json!({ "name": name, "target": target.0, "found": true }),
+                ),
+                None => ok(
+                    id,
+                    serde_json::json!({ "name": name, "target": null, "found": false }),
+                ),
+            }
+        }
+
+        method::LOOKUP_NAME => {
+            let name = req.params.get("name").and_then(|v| v.as_str());
+            let Some(name) = name else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'name'");
+            };
+            let n = node.lock().await;
+            match prism_name::lookup(&n.state, name) {
+                Some(rec) => ok(id, serde_json::to_value(&rec).unwrap_or_default()),
+                None => RpcResponse::err(id, codes::INVALID_PARAMS, "name not registered"),
+            }
+        }
+
+        method::REVERSE_NAME => {
+            let target = req.params.get("target").and_then(|v| v.as_str());
+            let Some(target) = target else {
+                return RpcResponse::err(id, codes::INVALID_PARAMS, "missing 'target'");
+            };
+            let n = node.lock().await;
+            let name = prism_name::reverse_lookup(&n.state, &veilux_kernel::PartyId::new(target));
+            let found = name.is_some();
+            ok(
+                id,
+                serde_json::json!({ "target": target, "name": name, "found": found }),
+            )
+        }
+
         method::EXPLORER_STATS => {
             let n = node.lock().await;
             ok(id, build_stats(&n))

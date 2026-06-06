@@ -16,6 +16,7 @@ use prism_ai::{infer_command, register_command, AiEvent, AiPrism, ModelKind};
 use prism_bridge::BridgePrism;
 use prism_confidential::ConfidentialPrism;
 use prism_contract::{call_command, deploy_command, vm, ContractEvent, ContractPrism};
+use prism_name::{register_command as name_register, NamePrism};
 use prism_nft::{create_collection_command, owner_of, NftCommand, NftEvent, NftPrism};
 use prism_oracle::OraclePrism;
 use prism_staking::StakingPrism;
@@ -106,7 +107,8 @@ fn cmd_serve(args: &[String]) -> Result<()> {
         .install(Box::new(BridgePrism::new()))
         .install(Box::new(StakingPrism::new()))
         .install(Box::new(OraclePrism::new()))
-        .install(Box::new(ConfidentialPrism::new()));
+        .install(Box::new(ConfidentialPrism::new()))
+        .install(Box::new(NamePrism::new()));
 
     let store = Store::open(&datadir)?;
     let mut node = Node::with_store(PartyId::new("dev-node"), cascade, store)
@@ -402,7 +404,8 @@ fn build_node(proposer: &str) -> Node {
         .install(Box::new(BridgePrism::new()))
         .install(Box::new(StakingPrism::new()))
         .install(Box::new(OraclePrism::new()))
-        .install(Box::new(ConfidentialPrism::new()));
+        .install(Box::new(ConfidentialPrism::new()))
+        .install(Box::new(NamePrism::new()));
     Node::new(PartyId::new(proposer), cascade)
 }
 
@@ -419,7 +422,8 @@ fn cmd_run(datadir: &str) -> Result<()> {
         .install(Box::new(BridgePrism::new()))
         .install(Box::new(StakingPrism::new()))
         .install(Box::new(OraclePrism::new()))
-        .install(Box::new(ConfidentialPrism::new()));
+        .install(Box::new(ConfidentialPrism::new()))
+        .install(Box::new(NamePrism::new()));
 
     let store = Store::open(datadir)?;
     let proposer = PartyId::new("validator-0");
@@ -606,6 +610,7 @@ fn cmd_demo() -> Result<()> {
     demo_token(&mut node, &alice_id)?;
     demo_nft(&mut node, &alice_id)?;
     demo_contract(&mut node, &alice_id)?;
+    demo_name(&mut node, &alice_id)?;
 
     info!("demo complete");
     Ok(())
@@ -765,6 +770,38 @@ fn demo_contract(node: &mut Node, alice_id: &PartyIdentity) -> Result<()> {
     println!("contract deployed at {}", address);
     if let Some((ret, gas)) = result {
         println!("call result: 111 + 222 = {:?} (gas {})", ret, gas);
+    }
+    Ok(())
+}
+
+fn demo_name(node: &mut Node, alice_id: &PartyIdentity) -> Result<()> {
+    println!("\n--- name service prism (VNS, ENS-like) ---");
+    let next_nonce = node
+        .nonces
+        .get(&PartyId::new("alice"))
+        .map(|n| n + 1)
+        .unwrap_or(0);
+    let register = name_register(
+        PartyId::new("alice"),
+        Visibility::Public,
+        next_nonce,
+        "alice",
+        0,
+        Some(PartyId::new("party:alice-wallet")),
+    );
+    node.submit_signed(alice_id.sign(register))?;
+    node.produce_block()?;
+
+    match prism_name::resolve(&node.state, "alice.veil") {
+        Some(target) => println!("alice.veil resolves to: {}", target.0),
+        None => println!("alice.veil did not resolve (unexpected)"),
+    }
+    if let Some(rec) = prism_name::lookup(&node.state, "alice") {
+        println!("owner: {} · expires_at: {}", rec.owner.0, rec.expires_at);
+    }
+    if let Some(name) = prism_name::reverse_lookup(&node.state, &PartyId::new("party:alice-wallet"))
+    {
+        println!("reverse lookup of party:alice-wallet: {}", name);
     }
     Ok(())
 }

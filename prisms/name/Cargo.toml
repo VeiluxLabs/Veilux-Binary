@@ -1,0 +1,15 @@
+[package]
+name = "prism-name"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Name Service Prism (VNS) — human-readable names that resolve to parties/addresses for VEILUX"
+
+[dependencies]
+veilux-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+blake3.workspace = true

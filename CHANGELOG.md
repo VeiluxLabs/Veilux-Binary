@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-07
+
+### Added
+- **Name Service Prism (VNS) — an ENS-like naming add-on.** Register
+  human-readable `name.veil` names that resolve to a `PartyId`/address, the tenth
+  Prism shipped. Features: registration with optional expiry, renewal, ownership
+  transfer, a settable resolution target, arbitrary text records (avatar, url,
+  etc., capped), forward `resolve`, `lookup`, and `reverse_lookup`, and
+  reclaiming of expired names. Strict label validation (lowercase `a-z0-9-`,
+  1–63 chars, no leading/trailing hyphen). Expiry is driven by a new `chain/now`
+  block-timestamp written into state on commit. Exposed over JSON-RPC as
+  `veilux_resolveName`, `veilux_lookupName`, and `veilux_reverseName`, and
+  demonstrated live in `veilux demo`. Six unit tests cover registration,
+  resolution, reverse lookup, expiry/reclaim, ownership enforcement, and label
+  validation.
+
 ## [0.7.6] - 2026-06-06
 
 ### Fixed
@@ -663,7 +679,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.3...v0.7.4

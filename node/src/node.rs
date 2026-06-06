@@ -391,6 +391,7 @@ impl Node {
         let candidates: Vec<Command> = self.mempool.iter().take(take).cloned().collect();
 
         let mut trial_state = self.state.clone();
+        let _ = trial_state.put_json("chain/now", &now().max(parent.timestamp));
         let mut all_events = Vec::new();
         let mut commands: Vec<Command> = Vec::with_capacity(candidates.len());
         let mut rejected: Vec<Hash> = Vec::new();
@@ -459,6 +460,7 @@ impl Node {
         }
 
         let mut new_state = self.state.clone();
+        let _ = new_state.put_json("chain/now", &block.timestamp);
         let mut events = Vec::new();
         let block_proposer = block.proposer.clone();
         let price = Self::base_price(&new_state, self.fee_policy);

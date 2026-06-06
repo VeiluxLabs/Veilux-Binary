@@ -18,6 +18,9 @@ pub mod method {
     pub const GET_ACCOUNT: &str = "veilux_getAccount";
     pub const SUBMIT_PRIVATE: &str = "veilux_submitPrivate";
     pub const PRIVATE_ROOT: &str = "veilux_privateRoot";
+    pub const RESOLVE_NAME: &str = "veilux_resolveName";
+    pub const LOOKUP_NAME: &str = "veilux_lookupName";
+    pub const REVERSE_NAME: &str = "veilux_reverseName";
 
     pub const EXPLORER_STATS: &str = "explorer_stats";
     pub const EXPLORER_RECENT_BLOCKS: &str = "explorer_recentBlocks";
