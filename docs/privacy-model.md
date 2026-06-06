@@ -147,10 +147,13 @@ empty), and that a tampered envelope is rejected.
 > Stakeholders also **sign a `(commitment, private_root)` attestation** after
 > executing; these are gossiped (`NetMessage::PrivateRoot`) so any divergence in
 > the confidential state between stakeholders is detected and flagged
-> (`AttestationOutcome::Divergence`). Verified live on a 3-validator network: both
-> stakeholders reached byte-identical private state and cross-attested without
-> divergence. Remaining: a *quorum/slashing* response to a flagged divergence
-> (today it is detected and logged, not yet penalized).
+> (`AttestationOutcome::Divergence`). A stakeholder that signs **two conflicting
+> private roots for the same commitment** is now **slashed on-chain**: the node
+> turns the two signed attestations into a staking `EquivocationProof` and submits
+> a `staking.slash` (the same unforgeable double-sign mechanism used for consensus
+> equivocation), burning the offender's stake. Verified live on a 3-validator
+> network (honest case: both stakeholders agree, no false slash); the slash path
+> is covered end to end by `private_divergence_yields_a_valid_slash_proof`.
 
 #### Try it live
 

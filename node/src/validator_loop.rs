@@ -356,6 +356,14 @@ async fn handle_message(msg: NetMessage, net: &NetHandle, eng: &mut Engine) {
         }
         NetMessage::PrivateRoot(att) => {
             let commitment = att.commitment;
+            if let Some(proof) = eng.node.private_divergence_proof(&att) {
+                warn!(
+                    commitment = %commitment,
+                    offender = %proof.offender,
+                    "PRIVATE-ROOT DIVERGENCE: stakeholder signed two conflicting roots; submitting slash"
+                );
+                submit_private_slash(eng, net, proof).await;
+            }
             match eng.node.record_attestation(*att) {
                 veilux_veil::AttestationOutcome::Divergence { existing, incoming } => {
                     warn!(
@@ -477,6 +485,30 @@ fn sign_vote(identity: &PartyIdentity, mut vote: Vote) -> Vote {
         vote.signature = identity.sign_bytes(&vote.signing_bytes());
     }
     vote
+}
+
+async fn submit_private_slash(
+    eng: &mut Engine,
+    net: &NetHandle,
+    proof: prism_staking::EquivocationProof,
+) {
+    let nonce = eng
+        .node
+        .nonces
+        .get(eng.identity.party())
+        .map(|n| n + 1)
+        .unwrap_or(0);
+    let cmd = prism_staking::staking_command(
+        eng.me.clone(),
+        Visibility::Public,
+        nonce,
+        eng.height,
+        &prism_staking::StakingCommand::Slash { proof },
+    );
+    let signed = eng.identity.sign_for_chain(cmd, eng.node.chain_id);
+    if eng.node.submit_signed(signed.clone()).is_ok() {
+        let _ = net.net.broadcast(&NetMessage::Command(Box::new(signed)));
+    }
 }
 
 async fn detect_equivocation(eng: &mut Engine, net: &NetHandle, vote: &Vote) {

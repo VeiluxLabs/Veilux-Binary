@@ -40,6 +40,10 @@ impl RootAttestation {
         }
     }
 
+    pub fn signed_message(&self) -> Vec<u8> {
+        attestation_message(&self.commitment, &self.private_root, &self.party)
+    }
+
     pub fn verify(&self) -> Result<(), IdentityError> {
         let msg = attestation_message(&self.commitment, &self.private_root, &self.party);
         verify_bytes(&self.public_key, &msg, &self.signature)
@@ -57,6 +61,14 @@ pub enum AttestationOutcome {
     Duplicate,
     Divergence { existing: Hash, incoming: Hash },
     Invalid,
+}
+
+#[derive(Clone, Debug)]
+pub struct EquivocatingPair {
+    pub party: PartyId,
+    pub public_key: Vec<u8>,
+    pub a: RootAttestation,
+    pub b: RootAttestation,
 }
 
 impl AttestationBook {
@@ -91,6 +103,22 @@ impl AttestationBook {
 
         self.entries.push(attestation);
         AttestationOutcome::Recorded
+    }
+
+    pub fn self_equivocation(&self, incoming: &RootAttestation) -> Option<EquivocatingPair> {
+        self.entries
+            .iter()
+            .find(|e| {
+                e.commitment == incoming.commitment
+                    && e.party == incoming.party
+                    && e.private_root != incoming.private_root
+            })
+            .map(|existing| EquivocatingPair {
+                party: incoming.party.clone(),
+                public_key: incoming.public_key.clone(),
+                a: existing.clone(),
+                b: incoming.clone(),
+            })
     }
 
     pub fn agreement(&self, commitment: &Hash) -> Vec<&RootAttestation> {

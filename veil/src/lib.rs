@@ -6,7 +6,7 @@ pub mod private;
 pub mod projection;
 pub mod view;
 
-pub use attest::{AttestationBook, AttestationOutcome, RootAttestation};
+pub use attest::{AttestationBook, AttestationOutcome, EquivocatingPair, RootAttestation};
 pub use disclosure::{audit_open, grant_disclosure, AuditableEntry, DisclosureGrant, GrantScope};
 pub use identity::{
     verify_bytes, verify_signed, verify_signed_batch, IdentityError, PartyIdentity,

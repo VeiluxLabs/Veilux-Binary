@@ -624,6 +624,21 @@ impl Node {
         self.attestations.record(attestation)
     }
 
+    pub fn private_divergence_proof(
+        &self,
+        attestation: &veilux_veil::RootAttestation,
+    ) -> Option<prism_staking::EquivocationProof> {
+        let pair = self.attestations.self_equivocation(attestation)?;
+        Some(prism_staking::EquivocationProof {
+            offender: pair.party,
+            public_key: hex::encode(&pair.public_key),
+            message_a: hex::encode(pair.a.signed_message()),
+            signature_a: hex::encode(&pair.a.signature),
+            message_b: hex::encode(pair.b.signed_message()),
+            signature_b: hex::encode(&pair.b.signature),
+        })
+    }
+
     pub fn private_consistent(&self, commitment: &Hash) -> bool {
         self.attestations.is_consistent(commitment)
     }
@@ -1210,6 +1225,76 @@ mod tests {
         assert!(
             matches!(outcome, veilux_veil::AttestationOutcome::Divergence { .. }),
             "a conflicting private root for an already-attested stakeholder must be flagged as divergence, got {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn private_divergence_yields_a_valid_slash_proof() {
+        use veilux_veil::{PartyIdentity, RootAttestation};
+
+        let commitment = Hash::digest(b"divergent-confidential-tx");
+        let bob_seed = [0x42u8; 32];
+        let bob = PartyIdentity::from_seed("bob", &bob_seed);
+
+        let honest = RootAttestation::create(&bob, commitment, Hash::digest(b"root-honest"));
+        let conflicting = RootAttestation::create(&bob, commitment, Hash::digest(b"root-LIED"));
+
+        let mut n = node();
+        assert_eq!(
+            n.record_attestation(honest),
+            veilux_veil::AttestationOutcome::Recorded
+        );
+
+        let proof = n
+            .private_divergence_proof(&conflicting)
+            .expect("a same-party conflicting attestation must yield a slash proof");
+        assert_eq!(proof.offender, PartyId::new("bob"));
+        assert_ne!(
+            proof.message_a, proof.message_b,
+            "the two signed messages must differ"
+        );
+
+        let mut staking_node = {
+            let mut cascade = Cascade::new();
+            cascade.install(Box::new(prism_token::TokenPrism::new()));
+            cascade.install(Box::new(prism_staking::StakingPrism::new()));
+            Node::new(PartyId::new("v0"), cascade)
+        };
+        let _ = prism_token::seed_native_token(
+            &mut staking_node.state,
+            "Veilux",
+            "LUX",
+            0,
+            &PartyId::new("treasury"),
+            &[(PartyId::new("bob"), 10_000)],
+        );
+        let bob_stake = prism_staking::staking_command(
+            PartyId::new("bob"),
+            Visibility::Public,
+            0,
+            1,
+            &prism_staking::StakingCommand::Stake { amount: 1_000 },
+        );
+        let bob_id = PartyIdentity::from_seed("bob", &[1u8; 32]);
+        staking_node.submit_signed(bob_id.sign(bob_stake)).unwrap();
+        staking_node.produce_block().unwrap();
+        let before = prism_staking::voting_power_of(&staking_node.state, &PartyId::new("bob"));
+
+        let slash = prism_staking::staking_command(
+            PartyId::new("watchdog"),
+            Visibility::Public,
+            0,
+            2,
+            &prism_staking::StakingCommand::Slash { proof },
+        );
+        let watchdog = PartyIdentity::from_seed("watchdog", &[7u8; 32]);
+        staking_node.submit_signed(watchdog.sign(slash)).unwrap();
+        staking_node.produce_block().unwrap();
+        let after = prism_staking::voting_power_of(&staking_node.state, &PartyId::new("bob"));
+
+        assert!(
+            after < before,
+            "a private-root divergence proof must actually slash the offender's stake: {before} -> {after}"
         );
     }
 }

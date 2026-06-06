@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-06-06
+
+### Added
+- **On-chain slashing for confidential-state divergence.** A stakeholder that
+  signs two conflicting `(commitment, private_root)` attestations for the same
+  confidential transaction is now punished: the receiving node turns the two
+  signed attestations into a staking `EquivocationProof`
+  (`Node::private_divergence_proof`) and auto-submits a `staking.slash`, gossiped
+  to the network — the same unforgeable double-signature mechanism already used
+  for consensus equivocation, so the liar's stake is burned. This closes the last
+  open privacy-hardening item: a divergence is no longer merely detected and
+  logged, it is penalized on-chain. End-to-end test
+  `private_divergence_yields_a_valid_slash_proof` builds a real conflicting-root
+  proof and confirms the staking prism reduces the offender's voting power.
+
 ## [0.7.0] - 2026-06-06
 
 ### Added
@@ -554,7 +569,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.5...v0.7.0
 [0.6.5]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.3...v0.6.4
