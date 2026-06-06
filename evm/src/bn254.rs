@@ -1,6 +1,6 @@
 use crate::u256::U256;
 
-fn modulus() -> U256 {
+pub(crate) fn modulus() -> U256 {
     U256::from_big_endian(&[
         0x30, 0x64, 0x4e, 0x72, 0xe1, 0x31, 0xa0, 0x29, 0xb8, 0x50, 0x45, 0xb6, 0x81, 0x81, 0x58,
         0x5d, 0x97, 0x81, 0x6a, 0x91, 0x68, 0x71, 0xca, 0x8d, 0x3c, 0x20, 0x8c, 0x16, 0xd8, 0x7c,
@@ -8,7 +8,7 @@ fn modulus() -> U256 {
     ])
 }
 
-fn addmod(a: U256, b: U256, p: U256) -> U256 {
+pub(crate) fn addmod(a: U256, b: U256, p: U256) -> U256 {
     let (sum, carry) = a.overflowing_add(b);
     if carry || sum.cmp_u(&p) != std::cmp::Ordering::Less {
         sum.wrapping_sub(p)
@@ -17,7 +17,7 @@ fn addmod(a: U256, b: U256, p: U256) -> U256 {
     }
 }
 
-fn submod(a: U256, b: U256, p: U256) -> U256 {
+pub(crate) fn submod(a: U256, b: U256, p: U256) -> U256 {
     if a.cmp_u(&b) == std::cmp::Ordering::Less {
         a.wrapping_add(p).wrapping_sub(b)
     } else {
@@ -25,18 +25,41 @@ fn submod(a: U256, b: U256, p: U256) -> U256 {
     }
 }
 
-fn mulmod(a: U256, b: U256, p: U256) -> U256 {
-    let mut result = U256::ZERO;
-    let mut base = a.div_mod(p).1;
-    let mut exp = b;
-    while !exp.is_zero() {
-        if exp.bit(0) {
-            result = addmod(result, base, p);
+pub(crate) fn mulmod(a: U256, b: U256, p: U256) -> U256 {
+    let prod = full_mul(&a, &b);
+    reduce_512(&prod, &p)
+}
+
+fn full_mul(a: &U256, b: &U256) -> [u64; 8] {
+    let mut res = [0u64; 8];
+    for i in 0..4 {
+        let mut carry = 0u128;
+        for j in 0..4 {
+            let cur = res[i + j] as u128 + a.0[i] as u128 * b.0[j] as u128 + carry;
+            res[i + j] = cur as u64;
+            carry = cur >> 64;
         }
-        base = addmod(base, base, p);
-        exp = exp.shr(1);
+        res[i + 4] = res[i + 4].wrapping_add(carry as u64);
     }
-    result
+    res
+}
+
+fn prod_bit(prod: &[u64; 8], i: usize) -> bool {
+    (prod[i / 64] >> (i % 64)) & 1 == 1
+}
+
+fn reduce_512(prod: &[u64; 8], p: &U256) -> U256 {
+    let mut rem = U256::ZERO;
+    for i in (0..512).rev() {
+        rem = rem.shl(1);
+        if prod_bit(prod, i) {
+            rem.0[0] |= 1;
+        }
+        if rem.cmp_u(p) != std::cmp::Ordering::Less {
+            rem = rem.wrapping_sub(*p);
+        }
+    }
+    rem
 }
 
 fn powmod(a: U256, e: U256, p: U256) -> U256 {
@@ -53,7 +76,7 @@ fn powmod(a: U256, e: U256, p: U256) -> U256 {
     result
 }
 
-fn invmod(a: U256, p: U256) -> U256 {
+pub(crate) fn invmod(a: U256, p: U256) -> U256 {
     let two = U256::from_u64(2);
     powmod(a, p.wrapping_sub(two), p)
 }

@@ -747,6 +747,227 @@ mod tests {
         Node::new(PartyId::new("v0"), cascade)
     }
 
+    fn full_node() -> Node {
+        let mut cascade = Cascade::new();
+        cascade.install(Box::new(prism_token::TokenPrism::new()));
+        cascade.install(Box::new(prism_multisig::MultisigPrism::new()));
+        cascade.install(Box::new(prism_vesting::VestingPrism::new()));
+        cascade.install(Box::new(prism_dex::DexPrism::new()));
+        Node::new(PartyId::new("v0"), cascade)
+    }
+
+    fn derive_token_id(party: &str, symbol: &str, name: &str) -> Hash {
+        Hash::commit(
+            "token/id",
+            &[party.as_bytes(), symbol.as_bytes(), name.as_bytes()],
+        )
+    }
+
+    #[test]
+    fn multisig_dispatches_inner_transfer_through_cascade() {
+        let mut n = full_node();
+        let alice = PartyIdentity::from_seed("alice", &[1u8; 32]);
+        let bob = PartyIdentity::from_seed("bob", &[2u8; 32]);
+
+        let create = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            0,
+            "Gold",
+            "GLD",
+            0,
+            1_000,
+            false,
+        );
+        n.submit_signed(alice.sign(create)).unwrap();
+        n.produce_block().unwrap();
+        let token = derive_token_id("alice", "GLD", "Gold");
+
+        let acc_cmd = prism_multisig::create_account_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            1,
+            vec![PartyId::new("alice"), PartyId::new("bob")],
+            2,
+        );
+        n.submit_signed(alice.sign(acc_cmd)).unwrap();
+        n.produce_block().unwrap();
+        let account = n
+            .head()
+            .events
+            .iter()
+            .find_map(|e| {
+                match serde_json::from_slice::<prism_multisig::MultisigEvent>(&e.payload).ok()? {
+                    prism_multisig::MultisigEvent::AccountCreated { account, .. } => Some(account),
+                    _ => None,
+                }
+            })
+            .expect("account created");
+
+        prism_token::credit(&mut n.state, &token, &PartyId::new("multisig"), 500).unwrap();
+
+        let inner = prism_token::transfer_command(
+            PartyId::new("multisig"),
+            Visibility::Public,
+            0,
+            token,
+            PartyId::new("carol"),
+            500,
+        );
+        let propose = prism_multisig::propose_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            2,
+            account,
+            inner,
+        );
+        n.submit_signed(alice.sign(propose)).unwrap();
+        n.produce_block().unwrap();
+        assert_eq!(
+            prism_token::balance_of(&n.state, &token, &PartyId::new("carol")),
+            0,
+            "one approval must not move funds in a 2-of-2"
+        );
+
+        let confirm =
+            prism_multisig::confirm_command(PartyId::new("bob"), Visibility::Public, 0, account, 0);
+        n.submit_signed(bob.sign(confirm)).unwrap();
+        n.produce_block().unwrap();
+        assert_eq!(
+            prism_token::balance_of(&n.state, &token, &PartyId::new("carol")),
+            500,
+            "second approval must cascade the inner transfer"
+        );
+    }
+
+    #[test]
+    fn dex_swap_through_block_production() {
+        let mut n = full_node();
+        let lp = PartyIdentity::from_seed("lp", &[3u8; 32]);
+
+        let mk = |sym: &str, nonce: u64| {
+            prism_token::create_command(
+                PartyId::new("lp"),
+                Visibility::Public,
+                nonce,
+                sym,
+                sym,
+                0,
+                1_000_000,
+                false,
+            )
+        };
+        n.submit_signed(lp.sign(mk("AAA", 0))).unwrap();
+        n.produce_block().unwrap();
+        let a = derive_token_id("lp", "AAA", "AAA");
+        n.submit_signed(lp.sign(mk("BBB", 1))).unwrap();
+        n.produce_block().unwrap();
+        let b = derive_token_id("lp", "BBB", "BBB");
+
+        let create_pool =
+            prism_dex::create_pool_command(PartyId::new("lp"), Visibility::Public, 2, a, b);
+        n.submit_signed(lp.sign(create_pool)).unwrap();
+        n.produce_block().unwrap();
+        let pool = n
+            .head()
+            .events
+            .iter()
+            .find_map(|e| {
+                match serde_json::from_slice::<prism_dex::DexEvent>(&e.payload).ok()? {
+                    prism_dex::DexEvent::PoolCreated { pool, .. } => Some(pool),
+                    _ => None,
+                }
+            })
+            .expect("pool created");
+
+        let add = prism_dex::add_liquidity_command(
+            PartyId::new("lp"),
+            Visibility::Public,
+            3,
+            pool,
+            100_000,
+            100_000,
+        );
+        n.submit_signed(lp.sign(add)).unwrap();
+        n.produce_block().unwrap();
+
+        let before = prism_token::balance_of(&n.state, &b, &PartyId::new("lp"));
+        let swap = prism_dex::swap_command(
+            PartyId::new("lp"),
+            Visibility::Public,
+            4,
+            pool,
+            a,
+            10_000,
+            1,
+        );
+        n.submit_signed(lp.sign(swap)).unwrap();
+        n.produce_block().unwrap();
+        let after = prism_token::balance_of(&n.state, &b, &PartyId::new("lp"));
+        assert!(after > before, "swap must credit token B to the trader");
+        let pool_state = prism_dex::pool_of(&n.state, &pool).unwrap();
+        assert_eq!(pool_state.reserve_a, 110_000, "pool reserve A grows by amount_in");
+    }
+
+    #[test]
+    fn vesting_releases_with_chain_time() {
+        let mut n = full_node();
+        let funder = PartyIdentity::from_seed("funder", &[4u8; 32]);
+        let create = prism_token::create_command(
+            PartyId::new("funder"),
+            Visibility::Public,
+            0,
+            "Vest",
+            "VST",
+            0,
+            1_000_000,
+            false,
+        );
+        n.submit_signed(funder.sign(create)).unwrap();
+        n.produce_block().unwrap();
+        let token = derive_token_id("funder", "VST", "Vest");
+
+        let create_sched = prism_vesting::create_command(
+            PartyId::new("funder"),
+            Visibility::Public,
+            1,
+            token,
+            PartyId::new("team"),
+            100_000,
+            0,
+            0,
+            1,
+            false,
+        );
+        n.submit_signed(funder.sign(create_sched)).unwrap();
+        n.produce_block().unwrap();
+        let schedule = n
+            .head()
+            .events
+            .iter()
+            .find_map(|e| {
+                match serde_json::from_slice::<prism_vesting::VestingEvent>(&e.payload).ok()? {
+                    prism_vesting::VestingEvent::Created { schedule, .. } => Some(schedule),
+                    _ => None,
+                }
+            })
+            .expect("schedule created");
+
+        let release = prism_vesting::release_command(
+            PartyId::new("team"),
+            Visibility::Public,
+            0,
+            schedule,
+        );
+        let team = PartyIdentity::from_seed("team", &[5u8; 32]);
+        n.submit_signed(team.sign(release)).unwrap();
+        n.produce_block().unwrap();
+        assert!(
+            prism_token::balance_of(&n.state, &token, &PartyId::new("team")) > 0,
+            "fully-vested (duration=1, start=0) schedule must release to the beneficiary"
+        );
+    }
+
     #[test]
     fn system_account_cannot_submit_commands() {
         let mut n = node();
