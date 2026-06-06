@@ -102,7 +102,7 @@ pub struct Node {
     pub state: StateTree,
     pub private_state: StateTree,
     pub private_commitments: Vec<Hash>,
-    pub private_stakeholder_counts: std::collections::HashMap<Hash, usize>,
+    pub private_envelopes: std::collections::HashMap<Hash, veilux_veil::PrivateEnvelope>,
     pub attestations: veilux_veil::AttestationBook,
     pub blocks: Vec<Block>,
     pub mempool: Vec<Command>,
@@ -125,7 +125,7 @@ impl Node {
             state: StateTree::new(),
             private_state: StateTree::new(),
             private_commitments: Vec::new(),
-            private_stakeholder_counts: std::collections::HashMap::new(),
+            private_envelopes: std::collections::HashMap::new(),
             attestations: veilux_veil::AttestationBook::default(),
             blocks: vec![genesis],
             mempool: Vec::new(),
@@ -573,8 +573,8 @@ impl Node {
         }
 
         self.private_commitments.push(envelope.commitment);
-        self.private_stakeholder_counts
-            .insert(envelope.commitment, envelope.stakeholders.len());
+        self.private_envelopes
+            .insert(envelope.commitment, envelope.clone());
         if let Some(store) = &self.store {
             store
                 .save_private_commitments(&self.private_commitments)
@@ -647,10 +647,11 @@ impl Node {
         &self,
         commitment: &Hash,
     ) -> Vec<prism_staking::QuorumFraudProof> {
-        let count = match self.private_stakeholder_counts.get(commitment) {
-            Some(c) => *c,
+        let envelope = match self.private_envelopes.get(commitment) {
+            Some(e) => e.clone(),
             None => return Vec::new(),
         };
+        let count = envelope.stakeholders.len();
         let canonical = match self.attestations.canonical_root(commitment, count) {
             Some(r) => r,
             None => return Vec::new(),
@@ -662,7 +663,6 @@ impl Node {
             .map(|e| prism_staking::AttestationStatement {
                 party: e.party.clone(),
                 public_key: hex::encode(&e.public_key),
-                message: hex::encode(e.signed_message()),
                 signature: hex::encode(&e.signature),
                 root: e.private_root.to_hex(),
             })
@@ -673,12 +673,10 @@ impl Node {
             .into_iter()
             .map(|o| prism_staking::QuorumFraudProof {
                 offender: o.party.clone(),
-                commitment: commitment.to_hex(),
-                stakeholder_count: count as u32,
+                envelope: envelope.clone(),
                 offender_stmt: prism_staking::AttestationStatement {
                     party: o.party.clone(),
                     public_key: hex::encode(&o.public_key),
-                    message: hex::encode(o.signed_message()),
                     signature: hex::encode(&o.signature),
                     root: o.private_root.to_hex(),
                 },
@@ -1348,9 +1346,31 @@ mod tests {
 
     #[test]
     fn quorum_minority_liar_is_slashed_end_to_end() {
-        use veilux_veil::{PartyIdentity, RootAttestation};
+        use veilux_veil::{seal_private, PartyIdentity, RootAttestation, ViewKeyring};
 
-        let commitment = Hash::digest(b"4-party-confidential");
+        let parties = vec![
+            PartyId::new("alice"),
+            PartyId::new("bob"),
+            PartyId::new("carol"),
+            PartyId::new("mallory"),
+        ];
+        let rings: Vec<ViewKeyring> = parties
+            .iter()
+            .map(|p| ViewKeyring::from_passphrase(p.clone(), &format!("{}-seed", p.0)))
+            .collect();
+
+        let inner = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Parties(parties.clone()),
+            0,
+            "Secret",
+            "SEC",
+            0,
+            1_000,
+            true,
+        );
+        let envelope = seal_private(&inner, &parties, &rings, Hash::digest(b"q-round")).unwrap();
+        let commitment = envelope.commitment;
         let honest = Hash::digest(b"true-root");
         let lie = Hash::digest(b"mallory-fabricated-root");
 
@@ -1364,7 +1384,7 @@ mod tests {
         };
 
         let mut n = node();
-        n.private_stakeholder_counts.insert(commitment, 4);
+        n.private_envelopes.insert(commitment, envelope.clone());
         for who in ["alice", "bob", "carol"] {
             assert_eq!(
                 n.record_attestation(RootAttestation::create(&mk(who), commitment, honest)),
@@ -1420,6 +1440,104 @@ mod tests {
         assert!(
             after < before,
             "a quorum-fraud proof must slash the minority liar's stake: {before} -> {after}"
+        );
+    }
+
+    #[test]
+    fn forged_majority_cannot_slash_an_honest_stakeholder() {
+        use veilux_veil::{seal_private, PartyIdentity, RootAttestation, ViewKeyring};
+
+        let real_parties = vec![PartyId::new("alice"), PartyId::new("bob")];
+        let rings: Vec<ViewKeyring> = real_parties
+            .iter()
+            .map(|p| ViewKeyring::from_passphrase(p.clone(), &format!("{}-seed", p.0)))
+            .collect();
+        let inner = prism_token::create_command(
+            PartyId::new("alice"),
+            Visibility::Parties(real_parties.clone()),
+            0,
+            "Secret",
+            "SEC",
+            0,
+            1_000,
+            true,
+        );
+        let envelope = seal_private(&inner, &real_parties, &rings, Hash::digest(b"x")).unwrap();
+        let commitment = envelope.commitment;
+        let true_root = Hash::digest(b"the-true-root");
+
+        let mk = |name: &str, seed: u8| PartyIdentity::from_seed(name, &[seed; 32]);
+
+        let alice = mk("alice", 1);
+        let alice_att = RootAttestation::create(&alice, commitment, true_root);
+
+        let fabricated_root = Hash::digest(b"attacker-fabricated");
+        let sybils: Vec<prism_staking::AttestationStatement> = (0..5)
+            .map(|i| {
+                let s = mk(&format!("sybil{i}"), 100 + i as u8);
+                let att = RootAttestation::create(&s, commitment, fabricated_root);
+                prism_staking::AttestationStatement {
+                    party: att.party.clone(),
+                    public_key: hex::encode(&att.public_key),
+                    signature: hex::encode(&att.signature),
+                    root: att.private_root.to_hex(),
+                }
+            })
+            .collect();
+
+        let forged = prism_staking::QuorumFraudProof {
+            offender: PartyId::new("alice"),
+            envelope: envelope.clone(),
+            offender_stmt: prism_staking::AttestationStatement {
+                party: PartyId::new("alice"),
+                public_key: hex::encode(&alice_att.public_key),
+                signature: hex::encode(&alice_att.signature),
+                root: alice_att.private_root.to_hex(),
+            },
+            majority: sybils,
+        };
+
+        let mut staking_node = {
+            let mut cascade = Cascade::new();
+            cascade.install(Box::new(prism_token::TokenPrism::new()));
+            cascade.install(Box::new(prism_staking::StakingPrism::new()));
+            Node::new(PartyId::new("v0"), cascade)
+        };
+        let _ = prism_token::seed_native_token(
+            &mut staking_node.state,
+            "Veilux",
+            "LUX",
+            0,
+            &PartyId::new("treasury"),
+            &[(PartyId::new("alice"), 10_000)],
+        );
+        let stake = prism_staking::staking_command(
+            PartyId::new("alice"),
+            Visibility::Public,
+            0,
+            1,
+            &prism_staking::StakingCommand::Stake { amount: 2_000 },
+        );
+        staking_node.submit_signed(alice.sign(stake)).unwrap();
+        staking_node.produce_block().unwrap();
+        let before = prism_staking::voting_power_of(&staking_node.state, &PartyId::new("alice"));
+
+        let slash = prism_staking::staking_command(
+            PartyId::new("attacker"),
+            Visibility::Public,
+            0,
+            2,
+            &prism_staking::StakingCommand::SlashQuorum { proof: forged },
+        );
+        let attacker = PartyIdentity::from_seed("attacker", &[9u8; 32]);
+        let result = staking_node.submit_signed(attacker.sign(slash));
+        let _ = result;
+        let _ = staking_node.produce_block();
+        let after = prism_staking::voting_power_of(&staking_node.state, &PartyId::new("alice"));
+
+        assert_eq!(
+            before, after,
+            "a forged majority of sybils (not real stakeholders) must NOT be able to slash an honest stakeholder"
         );
     }
 }

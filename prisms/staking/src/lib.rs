@@ -100,7 +100,6 @@ pub struct EquivocationProof {
 pub struct AttestationStatement {
     pub party: PartyId,
     pub public_key: String,
-    pub message: String,
     pub signature: String,
     pub root: String,
 }
@@ -108,8 +107,7 @@ pub struct AttestationStatement {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QuorumFraudProof {
     pub offender: PartyId,
-    pub commitment: String,
-    pub stakeholder_count: u32,
+    pub envelope: veilux_veil::PrivateEnvelope,
     pub offender_stmt: AttestationStatement,
     pub majority: Vec<AttestationStatement>,
 }
@@ -692,25 +690,51 @@ impl Prism for StakingPrism {
             }
 
             StakingCommand::SlashQuorum { proof } => {
-                let verify_stmt = |s: &AttestationStatement| -> Result<Vec<u8>, PrismError> {
+                if !proof.envelope.verify_commitment() {
+                    return Err(PrismError::InvalidPayload(
+                        "envelope commitment does not bind its contents".into(),
+                    ));
+                }
+                let commitment = proof.envelope.commitment;
+                let stakeholders = &proof.envelope.stakeholders;
+                let count = stakeholders.len();
+
+                let verify_stmt = |s: &AttestationStatement| -> Result<(), PrismError> {
+                    if !stakeholders.contains(&s.party) {
+                        return Err(PrismError::Unauthorized(
+                            "attester is not a stakeholder of this confidential tx".into(),
+                        ));
+                    }
+                    let root_bytes = hex::decode(s.root.trim_start_matches("0x"))
+                        .map_err(|_| PrismError::InvalidPayload("bad root hex".into()))?;
+                    if root_bytes.len() != 32 {
+                        return Err(PrismError::InvalidPayload("root must be 32 bytes".into()));
+                    }
+                    let mut root = [0u8; 32];
+                    root.copy_from_slice(&root_bytes);
+                    let expected_msg = veilux_veil::attest::attestation_message(
+                        &commitment,
+                        &Hash(root),
+                        &s.party,
+                    );
                     let pk = hex::decode(s.public_key.trim_start_matches("0x"))
                         .map_err(|_| PrismError::InvalidPayload("bad public key hex".into()))?;
-                    let msg = hex::decode(s.message.trim_start_matches("0x"))
-                        .map_err(|_| PrismError::InvalidPayload("bad message hex".into()))?;
                     let sig = hex::decode(s.signature.trim_start_matches("0x"))
                         .map_err(|_| PrismError::InvalidPayload("bad signature hex".into()))?;
-                    verify_bytes(&pk, &msg, &sig).map_err(|_| {
-                        PrismError::Unauthorized("attestation signature invalid".into())
+                    verify_bytes(&pk, &expected_msg, &sig).map_err(|_| {
+                        PrismError::Unauthorized(
+                            "attestation signature invalid for this commitment".into(),
+                        )
                     })?;
-                    Ok(msg)
+                    Ok(())
                 };
 
-                verify_stmt(&proof.offender_stmt)?;
                 if proof.offender_stmt.party != proof.offender {
                     return Err(PrismError::InvalidPayload(
                         "offender statement party mismatch".into(),
                     ));
                 }
+                verify_stmt(&proof.offender_stmt)?;
 
                 let mut seen: Vec<PartyId> = Vec::new();
                 let mut canonical: Option<String> = None;
@@ -746,7 +770,6 @@ impl Prism for StakingPrism {
                     ));
                 }
 
-                let count = proof.stakeholder_count as usize;
                 let threshold = count / 2 + 1;
                 if proof.majority.len() < threshold {
                     return Err(PrismError::InvalidPayload(
@@ -758,7 +781,7 @@ impl Prism for StakingPrism {
                     "staking/quorum-fraud",
                     &[
                         proof.offender.0.as_bytes(),
-                        proof.commitment.as_bytes(),
+                        commitment.as_bytes(),
                         proof.offender_stmt.root.as_bytes(),
                     ],
                 );

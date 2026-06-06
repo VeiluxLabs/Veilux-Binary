@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-06-06
+
+### Security
+- **Fixed a forged-majority quorum-slash vulnerability** introduced with quorum
+  arbitration in 0.7.2 (found in internal audit before any release was used). The
+  `staking.slash_quorum` handler trusted a caller-supplied stakeholder count and
+  "majority" set, so an attacker could sign attestations with throwaway identities
+  and slash an honest stakeholder. The `QuorumFraudProof` now carries the full
+  `PrivateEnvelope`; the handler verifies the envelope commitment, derives the
+  real stakeholder set/count from it, requires every attester to be a genuine
+  stakeholder, and reconstructs each signed message from the bound commitment so
+  signatures cannot be replayed across contexts. New adversarial test
+  `forged_majority_cannot_slash_an_honest_stakeholder` proves a sybil majority
+  cannot slash an honest party; see `docs/security.md` §2.15.
+
 ## [0.7.2] - 2026-06-06
 
 ### Added
@@ -588,7 +603,8 @@ Initial public release.
   Docker image, and full documentation set.
 - Dual licensing under MIT OR Apache-2.0.
 
-[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/VeiluxLabs/Veilux-Binary/compare/v0.6.5...v0.7.0

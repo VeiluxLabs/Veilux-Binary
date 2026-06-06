@@ -187,6 +187,26 @@ check.
   `oversized_contract_code_is_rejected`, `garbage_raw_tx_does_not_panic`,
   `replayed_nonce_rejected`, `wrong_chain_id_rejected`.
 
+### 2.15 Forged-majority quorum slash (found & fixed during privacy hardening)
+- **Check:** The quorum-arbitration slash (`staking.slash_quorum`) burns the stake
+  of a stakeholder who signed a minority private root. The first cut let the
+  submitter supply the stakeholder count and the "majority" set freely, verifying
+  only that each majority signature was internally valid.
+- **Exploit:** an attacker could generate N throwaway identities, sign N
+  attestations for a fabricated root, set the count to match, and **slash an
+  honest stakeholder** who signed the true root — a griefing/theft vector created
+  by the new feature.
+- **Fix:** the `QuorumFraudProof` now carries the full `PrivateEnvelope`, and the
+  handler (1) verifies `envelope.verify_commitment()`, (2) derives the true
+  stakeholder set and count from the commitment-bound envelope, (3) requires every
+  attester (offender and majority) to be a genuine stakeholder, and (4)
+  reconstructs each signed attestation message from the bound commitment so a
+  signature cannot be replayed from another context. Sybil "stakeholders" are not
+  in the envelope's set and are rejected.
+- **Tests:** `node::tests::forged_majority_cannot_slash_an_honest_stakeholder`
+  (sybil majority fails to slash) and `quorum_minority_liar_is_slashed_end_to_end`
+  (a genuine in-envelope majority does slash the real minority liar).
+
 ---
 
 ## 3. Residual risks / out of scope (current build)
